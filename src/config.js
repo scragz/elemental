@@ -70,6 +70,11 @@ export const CAST_SPEED_REF = 1200; // px/s that maps to CAST_MULT_MAX
 export const MAX_RINGS = 48;
 export const MAX_PAIRS = 12;
 
+// Per-voice loudness. Contact amplitude is a product of sub-1 terms (banked,
+// envelopes, field); this lifts it back to an audible level. Compressor + master
+// gain keep the sum safe when many pairs voice at once.
+export const VOICE_LEVEL = 1.0;
+
 // Wavetable scan window (§9). A slice of the baked cycle, looped at pitch, is what
 // the moving contact "reads". Smaller = brighter/formant-like.
 export const SCAN_WIN = 1024;

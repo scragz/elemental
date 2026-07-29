@@ -3,7 +3,8 @@ import { ELEMENTS, SEDIMENT_LIFE, CHARGE_RADIUS } from './config.js';
 import { env } from './env.js';
 import { clamp01, clamp } from './util.js';
 
-const SEGMENTS = 72; // per-ring stroke resolution
+const SEGMENTS_MAX = 64; // per-ring stroke resolution (throttled down on slow frames)
+const SEGMENTS_MIN = 28;
 
 export class Renderer {
   constructor(canvas) {
@@ -29,7 +30,13 @@ export class Renderer {
 
   frame(state) {
     const ctx = this.ctx;
-    const { field, rings, gestures, contacts, now, firstRun } = state;
+    const { field, rings, gestures, contacts, now, firstRun, fps } = state;
+
+    // Self-throttle stroke resolution on slow frames so heavy fields stay smooth.
+    let segments = SEGMENTS_MAX;
+    if (fps < 50) segments = 48;
+    if (fps < 40) segments = 36;
+    if (fps < 30) segments = SEGMENTS_MIN;
 
     // Background luminance = FIELD (§5, §10). Motion-blur via low-alpha fill (§10).
     const lum = 3 + field * 20;
@@ -43,7 +50,7 @@ export class Renderer {
     // Additive compositing on rings and contacts only (§10).
     ctx.globalCompositeOperation = 'lighter';
 
-    for (const r of rings) this._drawRing(ctx, r);
+    for (const r of rings) this._drawRing(ctx, r, segments);
     for (const g of gestures) this._drawCharge(ctx, g);
     for (const cp of contacts) this._drawContact(ctx, cp);
 
@@ -72,32 +79,31 @@ export class Renderer {
     return { h: def.hue, s: def.sat, l };
   }
 
-  _drawRing(ctx, r) {
+  _drawRing(ctx, r, segments) {
     const envn = r.envelope();
-    if (envn <= 0.001) return;
+    if (envn <= 0.001 || r.r < 1) return;
     const col = this._elementColor(r.element);
     const wave = r.wave;
     const auth = r.auth;
     const nWave = wave.length;
     const nAuth = auth.length;
+    const step = (Math.PI * 2) / segments;
+    const massW = 0.6 + 0.4 * r.mass / 2;
 
     // Per-slot line width from wave[] and alpha from auth[] (§10).
-    for (let i = 0; i < SEGMENTS; i++) {
-      const t0 = i / SEGMENTS;
-      const t1 = (i + 1) / SEGMENTS;
-      const ang0 = r.phase + t0 * Math.PI * 2;
-      const ang1 = r.phase + t1 * Math.PI * 2;
+    for (let i = 0; i < segments; i++) {
+      const t0 = i / segments;
+      const ang0 = r.phase + i * step;
 
       const wv = Math.abs(wave[Math.floor(t0 * nWave) % nWave]);
       const au = auth[Math.floor(t0 * nAuth) % nAuth] || 0.2;
-
-      const lw = clamp(0.6 + wv * 5, 0.4, 7) * (0.6 + 0.4 * r.mass / 2);
       const alpha = clamp(au * envn * 0.9, 0, 1);
+      if (alpha < 0.02) continue; // invisible — skip the stroke
 
       ctx.strokeStyle = `hsla(${col.h}, ${col.s}%, ${col.l + wv * 20}%, ${alpha})`;
-      ctx.lineWidth = lw;
+      ctx.lineWidth = clamp(0.6 + wv * 5, 0.4, 7) * massW;
       ctx.beginPath();
-      ctx.arc(r.x, r.y, r.r, ang0, ang1);
+      ctx.arc(r.x, r.y, r.r, ang0, ang0 + step);
       ctx.stroke();
     }
 

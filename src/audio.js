@@ -28,11 +28,12 @@ export class AudioEngine {
     await ctx.audioWorklet.addModule(url);
 
     // Master chain.
+    // Safety limiter only — FIELD does the real gain-riding (§9).
     this.compressor = ctx.createDynamicsCompressor();
-    this.compressor.threshold.value = -14;
-    this.compressor.ratio.value = 12;
-    this.compressor.attack.value = 0.003;
-    this.compressor.release.value = 0.25;
+    this.compressor.threshold.value = -10;
+    this.compressor.ratio.value = 6;
+    this.compressor.attack.value = 0.005;
+    this.compressor.release.value = 0.2;
     this.compressor.connect(ctx.destination);
 
     this.master = ctx.createGain();
@@ -81,7 +82,14 @@ export class AudioEngine {
     panner.connect(send);
     send.connect(this.convolver);    // wet
 
-    return { node, filter, gain, panner, send, busy: false, key: null };
+    // Cache AudioParam refs so the per-frame update path does no Map lookups.
+    const P = node.parameters;
+    const params = {
+      scanA: P.get('scanA'), scanB: P.get('scanB'),
+      freqA: P.get('freqA'), freqB: P.get('freqB'),
+      jitter: P.get('jitter'),
+    };
+    return { node, filter, gain, panner, send, params, busy: false, key: null, tableKey: null };
   }
 
   alloc() {
@@ -98,20 +106,24 @@ export class AudioEngine {
     this.freeVoices.push(voice);
   }
 
-  // Load a pair's two wavetables into a voice.
-  setTables(voice, waveA, waveB) {
-    voice.node.port.postMessage({ tableA: waveA.slice(), tableB: waveB.slice() });
+  // Load a pair's two wavetables into a voice. `key` identifies the ring pair so we
+  // skip the (structured-clone) postMessage when the same voice keeps the same pair.
+  setTables(voice, waveA, waveB, key) {
+    if (voice.tableKey === key) return;
+    voice.tableKey = key;
+    voice.node.port.postMessage({ tableA: waveA, tableB: waveB }); // clone copies them
   }
 
   // Update a voice each frame from live contact geometry.
   updateVoice(voice, p) {
     const t = this.ctx.currentTime;
     const glide = p.water ? 0.04 : 0.008; // water slews scan position (§9)
-    voice.node.parameters.get('scanA').setTargetAtTime(p.scanA, t, glide);
-    voice.node.parameters.get('scanB').setTargetAtTime(p.scanB, t, glide);
-    voice.node.parameters.get('freqA').setTargetAtTime(p.freqA, t, 0.02);
-    voice.node.parameters.get('freqB').setTargetAtTime(p.freqB, t, 0.02);
-    voice.node.parameters.get('jitter').value = p.jitter;
+    const pm = voice.params;
+    pm.scanA.setTargetAtTime(p.scanA, t, glide);
+    pm.scanB.setTargetAtTime(p.scanB, t, glide);
+    pm.freqA.setTargetAtTime(p.freqA, t, 0.02);
+    pm.freqB.setTargetAtTime(p.freqB, t, 0.02);
+    pm.jitter.value = p.jitter;
 
     voice.gain.gain.setTargetAtTime(p.amp, t, 0.03);
     voice.panner.pan.setTargetAtTime(p.pan, t, 0.03);
@@ -137,7 +149,8 @@ export class AudioEngine {
     osc.frequency.setValueAtTime(freq * 2.2, t);
     osc.frequency.exponentialRampToValueAtTime(freq * 0.75, t + 0.12);
     const g = ctx.createGain();
-    const amp = 0.25 * level;
+    // exponentialRamp can't target 0, and a drained field makes 0.25·level → 0.
+    const amp = Math.max(0.0002, 0.25 * level);
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(amp, t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);

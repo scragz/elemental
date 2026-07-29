@@ -70,7 +70,9 @@ class ElementalVoice extends AudioWorkletProcessor {
     const jitter = params.jitter[0];
     const mix = params.mix[0];
     const dual = mix > 0.001;
-    const norm = dual ? 0.5 : 0.75;
+    // The two tables are decorrelated, so their sum grows ~√2 not ×2 — a gentler
+    // norm than 1/n keeps the voice from being needlessly quiet.
+    const norm = dual ? 0.85 : 0.95;
     for (let s = 0; s < n; s++) {
       const scA = scanA.length > 1 ? scanA[s] : scanA[0];
       let v = this.slice(this.tableA, scA, this.phaseA, freqA, jitter);

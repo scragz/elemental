@@ -3,7 +3,7 @@
 // Contact exists when |r1-r2| ≤ d ≤ r1+r2. Two contact points at ±α from the
 // centre-to-centre line, each reading both rings. The interaction matrix is not
 // written — scrub rate, chirps and unisons all fall out of this geometry.
-import { MAX_PAIRS } from './config.js';
+import { MAX_PAIRS, VOICE_LEVEL } from './config.js';
 import { env } from './env.js';
 import { clamp } from './util.js';
 
@@ -98,15 +98,16 @@ export class Interaction {
         if (v) {
           v.busy = true;
           v.key = this.key(r1, r2) + ':' + idx;
-          this.audio.setTables(v, r1.wave, r2.wave);
+          this.audio.setTables(v, r1.wave, r2.wave, v.key);
         }
         pair.voices[idx] = v;
       }
 
-      const amp = clamp(
-        r1.bankedAt(cp.a1) * r2.bankedAt(cp.a2) * env1 * env2 * field * 0.5,
-        0, 1
-      );
+      // banked₁·banked₂·FIELD (§4.2). sqrt lifts the low end so quiet contacts are
+      // still audible while loud swells still dominate; VOICE_LEVEL sets absolute
+      // loudness. Envelopes fade the pair in/out over each ring's life.
+      const banked = Math.sqrt(r1.bankedAt(cp.a1) * r2.bankedAt(cp.a2));
+      const amp = clamp(banked * env1 * env2 * field, 0, 1) * VOICE_LEVEL;
       intensity += amp;
 
       // Contact point screen position → pan + render.
