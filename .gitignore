@@ -1,5 +1,14 @@
+# dependencies
+/node_modules
+
 # production
 /build
+/dist
+
+# cloudflare / wrangler
+.wrangler
+.dev.vars
+.dev.vars.*
 
 # misc
 .DS_Store

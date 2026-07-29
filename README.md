@@ -6,22 +6,42 @@ No score, no goal, no save. The only thing that accumulates is fatigue in the fi
 
 This is an implementation of the ELEMENTAL design spec (v0.2) — a browser-based
 audio-visual instrument built with the Canvas 2D API and Web Audio (with an
-`AudioWorklet` for wavetable scanning). No build step, no dependencies.
+`AudioWorklet` for wavetable scanning). The instrument itself has no runtime
+dependencies; Vite bundles it and it deploys to Cloudflare Workers.
 
 ## Run it
 
-Because it uses ES modules and an `AudioWorklet`, it must be served over HTTP
-(not opened as a `file://` URL). Any static server works:
-
 ```bash
-# Python
-python3 -m http.server 8080
-
-# or Node
-npx http-server -p 8080
+npm install
+npm run dev      # Vite dev server with HMR → http://localhost:5173/
 ```
 
-Then open <http://localhost:8080/> and **tap and drag**.
+Then **tap and drag**.
+
+Other scripts:
+
+| script | what it does |
+|---|---|
+| `npm run build` | bundle the app to `dist/` (Vite) |
+| `npm run preview` | serve the production build locally |
+| `npm run start` | run the Worker locally against `dist/` (`wrangler dev`) |
+| `npm run deploy` | build + publish to Cloudflare Workers (`wrangler deploy`) |
+
+The instrument is plain ES modules, so the source also runs from any static file
+server (`python3 -m http.server`) without a build — it just needs HTTP, not
+`file://`, because of the modules and the `AudioWorklet`.
+
+## Deploy (Cloudflare Workers)
+
+Static assets are served by the Workers **ASSETS** binding; a thin worker
+(`src/worker/index.ts`) runs first only for `/api/*`, leaving room for future
+endpoints. `wrangler deploy` runs `npm run build` (see `wrangler.jsonc`'s
+`build.command`) and uploads `dist/`.
+
+```bash
+npx wrangler login   # once
+npm run deploy
+```
 
 ## How to play
 
@@ -60,6 +80,9 @@ the inscription, opacity is your authority. There is no HUD.
 | `src/field.js` | §5 | shared field economy |
 | `src/render.js` | §7, §10 | canvas readout: rings, contacts, sediment, luminance |
 | `src/main.js` | — | loop, pointer input (multitouch), orchestration |
+| `src/worker/index.ts` | — | Cloudflare Worker serving the built assets |
+
+Build/deploy config lives in `vite.config.ts`, `wrangler.jsonc`, and `tsconfig.json`.
 
 ## Notes on interpretation
 
