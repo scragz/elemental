@@ -24,6 +24,9 @@ let firstRun = 1;          // first-run text alpha; fades on first tap, never re
 let firstTapped = false;
 let lastT = performance.now() / 1000;
 let sedimentClock = 0;
+let fpsEMA = 60;
+
+window.__audio = audio; // debug handle
 
 // ---- input (Pointer Events; multitouch supported, §11.5) ----
 
@@ -130,6 +133,8 @@ function loop() {
   // First-run text fades on first tap and never returns (§10).
   if (firstTapped) firstRun = Math.max(0, firstRun - dt * 1.2);
 
+  if (dt > 0) fpsEMA = fpsEMA * 0.9 + (1 / dt) * 0.1;
+
   renderer.frame({
     field: field.level,
     rings,
@@ -137,6 +142,7 @@ function loop() {
     contacts: interaction.contactsThisFrame,
     now,
     firstRun,
+    fps: fpsEMA,
   });
 
   // Lightweight diagnostic snapshot (harmless; read by tests / curious consoles).
@@ -150,6 +156,7 @@ function loop() {
     voicedPairs: interaction.count,
     contacts: interaction.contactsThisFrame.length,
     fundamental: +tuning.fundamental.toFixed(1),
+    fps: +fpsEMA.toFixed(1),
   };
 
   requestAnimationFrame(loop);
