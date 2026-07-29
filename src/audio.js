@@ -127,15 +127,17 @@ export class AudioEngine {
 
     voice.gain.gain.setTargetAtTime(p.amp, t, 0.03);
     voice.panner.pan.setTargetAtTime(p.pan, t, 0.03);
-    // Lowpass tracks amplitude/energy — louder contacts open up (§9).
-    const cutoff = clamp(500 + p.amp * 5000 + p.brightness * 3000, 200, 12000);
+    // Lowpass tracks amplitude/energy — louder contacts open up (§9). Kept fairly
+    // open so voices don't get muffled into inaudibility on small speakers.
+    const cutoff = clamp(1200 + p.amp * 6000 + p.brightness * 4000, 600, 15000);
     voice.filter.frequency.setTargetAtTime(cutoff, t, 0.03);
   }
 
-  // Master amplitude = FIELD^0.7 (§5).
+  // Master amplitude = FIELD^0.7 (§5), with a small floor so an exhausted field
+  // reads as "hushed" rather than fully dead (voices still fade via their own amp).
   setField(level) {
     if (!this.ctx) return;
-    const g = Math.pow(level, 0.7) * 0.9;
+    const g = (0.12 + 0.88 * Math.pow(level, 0.7)) * 0.9;
     this.master.gain.setTargetAtTime(g, this.ctx.currentTime, 0.1);
   }
 

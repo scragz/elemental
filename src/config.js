@@ -34,11 +34,13 @@ export const POLES = [
 ];
 
 // Element behaviour + register (§4.1). `octave` multiplies the drifting fundamental.
+// Octaves are kept in an audible band: even earth sits ~100Hz+ so small laptop/phone
+// speakers can actually reproduce it. Ordering (earth<water<fire<air) is preserved.
 export const ELEMENTS = {
-  air:   { speed: 240, life: 4,  octave: 4.0,  hue: 270, sat: 70, character: 'thin'   },
+  air:   { speed: 240, life: 4,  octave: 3.0,  hue: 270, sat: 70, character: 'thin'   },
   fire:  { speed: 170, life: 6,  octave: 2.0,  hue: 14,  sat: 85, character: 'jitter' },
-  water: { speed: 95,  life: 12, octave: 1.0,  hue: 190, sat: 80, character: 'glide'  },
-  earth: { speed: 62,  life: 20, octave: 0.5,  hue: 40,  sat: 65, character: 'fat'    },
+  water: { speed: 95,  life: 12, octave: 1.5,  hue: 190, sat: 80, character: 'glide'  },
+  earth: { speed: 62,  life: 20, octave: 1.0,  hue: 40,  sat: 65, character: 'fat'    },
   null:  { speed: 120, life: 8,  octave: 1.5,  hue: 0,   sat: 0,  character: 'inert'  },
 };
 
@@ -46,7 +48,7 @@ export const ELEMENTS = {
 export const RATIOS = [1 / 1, 9 / 8, 5 / 4, 4 / 3, 3 / 2, 5 / 3, 15 / 8];
 
 // Tuning drift (§6): fundamental wanders within a 1.5-octave band, retargeting ~40s.
-export const TUNE_BASE   = 120;                 // Hz, centre of the band
+export const TUNE_BASE   = 165;                 // Hz, centre of the band
 export const TUNE_BAND   = Math.pow(2, 1.5);    // 1.5 octaves total span
 export const TUNE_RETARGET = 40;                // s between new targets
 export const TUNE_SLEW   = 0.06;                // fundamental drift smoothing

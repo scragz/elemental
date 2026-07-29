@@ -157,6 +157,10 @@ function loop() {
     contacts: interaction.contactsThisFrame.length,
     fundamental: +tuning.fundamental.toFixed(1),
     fps: +fpsEMA.toFixed(1),
+    busyVoices: audio.voices ? audio.voices.filter((v) => v.busy).length : 0,
+    freeVoices: audio.freeVoices ? audio.freeVoices.length : 0,
+    masterGain: audio.master ? +audio.master.gain.value.toFixed(3) : null,
+    sampleRate: audio.ctx ? audio.ctx.sampleRate : null,
   };
 
   requestAnimationFrame(loop);

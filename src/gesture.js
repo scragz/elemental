@@ -161,12 +161,14 @@ export class Gesture {
       const laps = Math.min(this.lapsCompleted, MAX_PARTIALS);
       if (laps === 0) {
         // Committed but released before the first full lap. The fractional lap only
-        // wrote to ref (§2.5); fall back to the in-progress shape so the ring still
-        // speaks. Hold the last written value across the unwritten tail.
+        // wrote to ref (§2.5); fall back to the in-progress shape as the fundamental
+        // so the ring still speaks. Hold the last written value across the unwritten
+        // tail; the DC offset is removed in normalize(), leaving a real AC waveform.
         let last = 0;
+        const written = this.globalSlot % SLOTS;
         for (let i = 0; i < SLOTS; i++) {
-          if (i <= this.globalSlot % SLOTS && this.shape[i] !== 0) last = this.shape[i];
-          wave[i] = last - 0.5; // centre it
+          if (i <= written) last = this.shape[i];
+          wave[i] = last;
         }
       } else {
         // Tile lap L's shape L times → Lth harmonic, with 1/L rolloff (§3).
@@ -196,12 +198,27 @@ export class Gesture {
   }
 }
 
+// Remove DC (the shape channel is unipolar, so every raw wave has a large mean),
+// then normalize to a target RMS rather than to unit peak. RMS normalization gives
+// every ring a consistent loudness regardless of how peaky or gentle the gesture's
+// distance variation was — a soft, smooth gesture shouldn't come out near-silent.
+// (Without the DC removal a wavetable oscillator outputs mostly an inaudible
+// constant; without RMS normalization, low-variation waves stay too quiet.)
+const TARGET_RMS = 0.6;
 function normalize(a) {
-  let max = 0;
-  for (let i = 0; i < a.length; i++) max = Math.max(max, Math.abs(a[i]));
-  if (max < 1e-6) return;
-  const inv = 1 / max;
-  for (let i = 0; i < a.length; i++) a[i] *= inv;
+  const n = a.length;
+  let mean = 0;
+  for (let i = 0; i < n; i++) mean += a[i];
+  mean /= n;
+  let sq = 0;
+  for (let i = 0; i < n; i++) {
+    a[i] -= mean;
+    sq += a[i] * a[i];
+  }
+  const rms = Math.sqrt(sq / n);
+  if (rms < 1e-6) return;
+  const scale = TARGET_RMS / rms;
+  for (let i = 0; i < n; i++) a[i] *= scale;
 }
 
 // Linear resample src (length N) → dst (length M), treated as a periodic cycle.
