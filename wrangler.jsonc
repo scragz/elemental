@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "elemental",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2025-01-01",
+  "build": {
+    "command": "npm run build",
+    "watch_dir": ["index.html", "src", "vite.config.ts"]
+  },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*"]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "elemental",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "ELEMENTAL — an instrument disguised as a toy. Tap to cast a ring; rings meet and read each other aloud.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260729.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "wrangler": "^4.115.0"
+  }
+}
