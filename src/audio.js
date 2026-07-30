@@ -38,7 +38,23 @@ export class AudioEngine {
 
     this.master = ctx.createGain();
     this.master.gain.value = 0.0;
-    this.master.connect(this.compressor);
+
+    // Voicing chain for small speakers: drop sub-audible bass that only wastes
+    // headroom, and lift presence in the band phones actually reproduce.
+    this.highpass = ctx.createBiquadFilter();
+    this.highpass.type = 'highpass';
+    this.highpass.frequency.value = 150;
+    this.highpass.Q.value = 0.7;
+
+    this.presence = ctx.createBiquadFilter();
+    this.presence.type = 'peaking';
+    this.presence.frequency.value = 1600;
+    this.presence.Q.value = 0.8;
+    this.presence.gain.value = 5;
+
+    this.master.connect(this.highpass);
+    this.highpass.connect(this.presence);
+    this.presence.connect(this.compressor);
 
     this.bus = ctx.createGain();
     this.bus.connect(this.master);

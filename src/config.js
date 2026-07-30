@@ -34,34 +34,40 @@ export const POLES = [
 ];
 
 // Element behaviour + register (§4.1). `octave` multiplies the drifting fundamental.
-// Octaves are kept in an audible band: even earth sits ~100Hz+ so small laptop/phone
-// speakers can actually reproduce it. Ordering (earth<water<fire<air) is preserved.
+// Octaves are pushed into the range phone speakers can reproduce (they roll off hard
+// below ~400Hz): even earth's fundamental sits ~200Hz+ with strong harmonics above.
+// Ordering (earth<water<fire<air) is preserved.
 export const ELEMENTS = {
-  air:   { speed: 240, life: 4,  octave: 3.0,  hue: 270, sat: 70, character: 'thin'   },
-  fire:  { speed: 170, life: 6,  octave: 2.0,  hue: 14,  sat: 85, character: 'jitter' },
-  water: { speed: 95,  life: 12, octave: 1.5,  hue: 190, sat: 80, character: 'glide'  },
-  earth: { speed: 62,  life: 20, octave: 1.0,  hue: 40,  sat: 65, character: 'fat'    },
-  null:  { speed: 120, life: 8,  octave: 1.5,  hue: 0,   sat: 0,  character: 'inert'  },
+  air:   { speed: 240, life: 4,  octave: 3.5,  hue: 270, sat: 70, character: 'thin'   },
+  fire:  { speed: 170, life: 6,  octave: 2.5,  hue: 14,  sat: 85, character: 'jitter' },
+  water: { speed: 95,  life: 12, octave: 2.0,  hue: 190, sat: 80, character: 'glide'  },
+  earth: { speed: 62,  life: 20, octave: 1.5,  hue: 40,  sat: 65, character: 'fat'    },
+  null:  { speed: 120, life: 8,  octave: 2.0,  hue: 0,   sat: 0,  character: 'inert'  },
 };
 
 // Just-intonation ratios off the fundamental (§6).
 export const RATIOS = [1 / 1, 9 / 8, 5 / 4, 4 / 3, 3 / 2, 5 / 3, 15 / 8];
 
 // Tuning drift (§6): fundamental wanders within a 1.5-octave band, retargeting ~40s.
-export const TUNE_BASE   = 165;                 // Hz, centre of the band
+export const TUNE_BASE   = 220;                 // Hz, centre of the band
 export const TUNE_BAND   = Math.pow(2, 1.5);    // 1.5 octaves total span
 export const TUNE_RETARGET = 40;                // s between new targets
 export const TUNE_SLEW   = 0.06;                // fundamental drift smoothing
 
-// Field economy (§5).
+// Field economy (§5). Tuned gentle: the "dense → hushed → recover" breathing stays,
+// but costs are lower and refills faster so casual play never drains to silence.
 export const FIELD = {
-  plop: 0.12,               // cost on pointerdown
-  moveCostPerSec: 0.04,     // × normalized speed while holding & moving
-  voiceCostPerSec: 0.008,   // × intensity, per active collision voice
-  refillIdle: 0.055,        // no pointer, no collisions
-  refillBusy: 0.030,        // no pointer, collisions active
-  refillHold: 0.020,        // holding still
+  plop: 0.07,               // cost on pointerdown
+  moveCostPerSec: 0.025,    // × normalized speed while holding & moving
+  voiceCostPerSec: 0.004,   // × intensity, per active collision voice
+  refillIdle: 0.10,         // no pointer, no collisions
+  refillBusy: 0.06,         // no pointer, collisions active
+  refillHold: 0.045,        // holding still
 };
+
+// How much FIELD attenuates voice amplitude (§5). Floored so an exhausted field
+// dims rather than silences — the visible luminance still reads the true level.
+export const FIELD_VOICE_FLOOR = 0.5;
 
 // Casting (§1.3): release velocity → expansion multiplier.
 export const CAST_MULT_MIN = 0.6;
@@ -75,7 +81,7 @@ export const MAX_PAIRS = 12;
 // Per-voice loudness. Contact amplitude is a product of sub-1 terms (banked,
 // envelopes, field); this lifts it back to an audible level. Compressor + master
 // gain keep the sum safe when many pairs voice at once.
-export const VOICE_LEVEL = 1.0;
+export const VOICE_LEVEL = 1.3;
 
 // Wavetable scan window (§9). A slice of the baked cycle, looped at pitch, is what
 // the moving contact "reads". Smaller = brighter/formant-like.
