@@ -53,6 +53,15 @@ function updateDebugHud() {
 
 // ---- input (Pointer Events; multitouch supported, §11.5) ----
 
+// Haptic feedback where supported (Android browsers via the Vibration API). iOS
+// Safari has no web vibration API, so this silently no-ops there.
+const canVibrate = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
+function haptic(ms) {
+  if (canVibrate) {
+    try { navigator.vibrate(ms); } catch (_) { /* ignore */ }
+  }
+}
+
 // Start (or resume) the audio context, returning a promise that resolves once it's
 // ready. Fixes the silent first tap: init() is async, so the first tick has to wait.
 let audioStarting = null;
@@ -73,6 +82,7 @@ function pointerDown(e) {
   const pan = (e.clientX / env.w) * 2 - 1;
   // Subtle tick on every tap — plays as soon as audio is ready (first tap included).
   ensureAudio().then(() => audio.tick(pan));
+  haptic(6); // faint buzz on touch
 }
 
 function pointerMove(e) {
@@ -87,6 +97,7 @@ function pointerMove(e) {
       // Element chosen by the initial slide — sound its distinct voice.
       const pan = (ev.clientX / env.w) * 2 - 1;
       audio.elementSound(g.element, tuning.fundamental, pan);
+      haptic([0, 14, 8, 14]); // a distinct double-pulse on commit
     }
   }
 }
@@ -103,6 +114,7 @@ function pointerUp(e) {
   // Soft "let go" on release.
   const pan = (e.clientX / env.w) * 2 - 1;
   audio.releaseSound(g.element, tuning.fundamental, pan);
+  haptic(10);
 }
 
 canvas.addEventListener('pointerdown', pointerDown);
