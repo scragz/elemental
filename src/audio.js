@@ -23,9 +23,8 @@ export class AudioEngine {
     if (this.ctx) return;
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     this.ctx = ctx;
-
-    const url = new URL('./voice-worklet.js', import.meta.url);
-    await ctx.audioWorklet.addModule(url);
+    this.workletOk = false;
+    this.initError = null;
 
     // Master chain.
     // Safety limiter only — FIELD does the real gain-riding (§9).
@@ -64,7 +63,21 @@ export class AudioEngine {
     this.convolver.buffer = makeIR(ctx, 2.6);
     this.convolver.connect(this.bus);
 
-    // Pre-allocate the voice pool.
+    // Load the AudioWorklet and build the voice pool. If this fails (some mobile
+    // browsers), plops still work via the master chain above; collisions fall back
+    // to standard oscillator voices (see _makeVoice).
+    try {
+      if (/[?&]noworklet\b/.test(location.search)) throw new Error('forced off (?noworklet)');
+      if (!ctx.audioWorklet) throw new Error('AudioWorklet unsupported');
+      const url = new URL('./voice-worklet.js', import.meta.url);
+      await ctx.audioWorklet.addModule(url);
+      this.workletOk = true;
+    } catch (e) {
+      this.workletOk = false;
+      this.initError = String(e && e.message ? e.message : e);
+    }
+
+    // Pre-allocate the voice pool (worklet-backed if available, else oscillator).
     for (let i = 0; i < POOL_SIZE; i++) {
       this.voices.push(this._makeVoice());
     }
@@ -79,11 +92,6 @@ export class AudioEngine {
 
   _makeVoice() {
     const ctx = this.ctx;
-    const node = new AudioWorkletNode(ctx, 'elemental-voice', {
-      numberOfInputs: 0,
-      numberOfOutputs: 1,
-      outputChannelCount: [1],
-    });
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = 2000;
@@ -93,19 +101,70 @@ export class AudioEngine {
     const send = ctx.createGain();
     send.gain.value = 0.35;
 
-    node.connect(filter).connect(gain).connect(panner);
+    filter.connect(gain).connect(panner);
     panner.connect(this.bus);        // dry
     panner.connect(send);
     send.connect(this.convolver);    // wet
 
-    // Cache AudioParam refs so the per-frame update path does no Map lookups.
-    const P = node.parameters;
-    const params = {
-      scanA: P.get('scanA'), scanB: P.get('scanB'),
-      freqA: P.get('freqA'), freqB: P.get('freqB'),
-      jitter: P.get('jitter'),
-    };
-    return { node, filter, gain, panner, send, params, busy: false, key: null, tableKey: null };
+    const voice = { filter, gain, panner, send, busy: false, key: null, tableKey: null };
+
+    if (this.workletOk) {
+      const node = new AudioWorkletNode(ctx, 'elemental-voice', {
+        numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1],
+      });
+      node.connect(filter);
+      const P = node.parameters;
+      voice.kind = 'worklet';
+      voice.node = node;
+      voice.params = {
+        scanA: P.get('scanA'), scanB: P.get('scanB'),
+        freqA: P.get('freqA'), freqB: P.get('freqB'),
+        jitter: P.get('jitter'),
+      };
+    } else {
+      // Oscillator fallback (no worklet): two PeriodicWave oscillators, one per ring,
+      // summed. The scan position sweeps the lowpass for movement instead of the
+      // windowed table scan. Universally supported (iOS Safari, etc.).
+      const oscA = ctx.createOscillator();
+      const oscB = ctx.createOscillator();
+      const mix = ctx.createGain();
+      mix.gain.value = 1.5; // match the worklet path's loudness
+      oscA.frequency.value = 220;
+      oscB.frequency.value = 220;
+      oscA.connect(mix);
+      oscB.connect(mix);
+      mix.connect(filter);
+      oscA.start();
+      oscB.start();
+      voice.kind = 'osc';
+      voice.oscA = oscA;
+      voice.oscB = oscB;
+    }
+    return voice;
+  }
+
+  // Build (and cache) a PeriodicWave from a baked single-cycle wavetable via DFT.
+  _periodicWave(wave) {
+    if (!this._pwCache) this._pwCache = new WeakMap();
+    let pw = this._pwCache.get(wave);
+    if (pw) return pw;
+    const M = wave.length;
+    const H = 128; // harmonics
+    const real = new Float32Array(H + 1);
+    const imag = new Float32Array(H + 1);
+    for (let k = 1; k <= H; k++) {
+      let re = 0, im = 0;
+      const w = (2 * Math.PI * k) / M;
+      for (let i = 0; i < M; i++) {
+        re += wave[i] * Math.cos(w * i);
+        im -= wave[i] * Math.sin(w * i);
+      }
+      real[k] = (2 / M) * re;
+      imag[k] = (2 / M) * im;
+    }
+    pw = this.ctx.createPeriodicWave(real, imag, { disableNormalization: false });
+    this._pwCache.set(wave, pw);
+    return pw;
   }
 
   alloc() {
@@ -123,37 +182,52 @@ export class AudioEngine {
   }
 
   // Load a pair's two wavetables into a voice. `key` identifies the ring pair so we
-  // skip the (structured-clone) postMessage when the same voice keeps the same pair.
+  // skip the work when the same voice keeps the same pair.
   setTables(voice, waveA, waveB, key) {
     if (voice.tableKey === key) return;
     voice.tableKey = key;
-    voice.node.port.postMessage({ tableA: waveA, tableB: waveB }); // clone copies them
+    if (voice.kind === 'worklet') {
+      voice.node.port.postMessage({ tableA: waveA, tableB: waveB }); // clone copies them
+    } else {
+      voice.oscA.setPeriodicWave(this._periodicWave(waveA));
+      voice.oscB.setPeriodicWave(this._periodicWave(waveB));
+    }
   }
 
   // Update a voice each frame from live contact geometry.
   updateVoice(voice, p) {
     const t = this.ctx.currentTime;
     const glide = p.water ? 0.04 : 0.008; // water slews scan position (§9)
-    const pm = voice.params;
-    pm.scanA.setTargetAtTime(p.scanA, t, glide);
-    pm.scanB.setTargetAtTime(p.scanB, t, glide);
-    pm.freqA.setTargetAtTime(p.freqA, t, 0.02);
-    pm.freqB.setTargetAtTime(p.freqB, t, 0.02);
-    pm.jitter.value = p.jitter;
+
+    if (voice.kind === 'worklet') {
+      const pm = voice.params;
+      pm.scanA.setTargetAtTime(p.scanA, t, glide);
+      pm.scanB.setTargetAtTime(p.scanB, t, glide);
+      pm.freqA.setTargetAtTime(p.freqA, t, 0.02);
+      pm.freqB.setTargetAtTime(p.freqB, t, 0.02);
+      pm.jitter.value = p.jitter;
+      // Lowpass tracks amplitude/energy — louder contacts open up (§9). Kept fairly
+      // open so voices don't get muffled into inaudibility on small speakers.
+      const cutoff = clamp(1200 + p.amp * 6000 + p.brightness * 4000, 600, 15000);
+      voice.filter.frequency.setTargetAtTime(cutoff, t, 0.03);
+    } else {
+      voice.oscA.frequency.setTargetAtTime(p.freqA, t, 0.02);
+      voice.oscB.frequency.setTargetAtTime(p.freqB, t, glide);
+      if (p.jitter) voice.oscA.detune.setTargetAtTime((Math.random() - 0.5) * 30, t, 0.03);
+      // The scan position sweeps the filter, giving the contact audible movement.
+      const cutoff = clamp(700 + p.scanA * 3500 + p.amp * 5000 + p.brightness * 3000, 500, 15000);
+      voice.filter.frequency.setTargetAtTime(cutoff, t, glide);
+    }
 
     voice.gain.gain.setTargetAtTime(p.amp, t, 0.03);
     voice.panner.pan.setTargetAtTime(p.pan, t, 0.03);
-    // Lowpass tracks amplitude/energy — louder contacts open up (§9). Kept fairly
-    // open so voices don't get muffled into inaudibility on small speakers.
-    const cutoff = clamp(1200 + p.amp * 6000 + p.brightness * 4000, 600, 15000);
-    voice.filter.frequency.setTargetAtTime(cutoff, t, 0.03);
   }
 
-  // Master amplitude = FIELD^0.7 (§5), with a small floor so an exhausted field
-  // reads as "hushed" rather than fully dead (voices still fade via their own amp).
+  // Master amplitude tracks FIELD (§5) but with a high floor so the instrument never
+  // drains to silence — FIELD still rides the visible luminance for the readout.
   setField(level) {
     if (!this.ctx) return;
-    const g = (0.12 + 0.88 * Math.pow(level, 0.7)) * 0.9;
+    const g = (0.6 + 0.4 * Math.pow(level, 0.7)) * 0.9;
     this.master.gain.setTargetAtTime(g, this.ctx.currentTime, 0.1);
   }
 
@@ -167,8 +241,9 @@ export class AudioEngine {
     osc.frequency.setValueAtTime(freq * 2.2, t);
     osc.frequency.exponentialRampToValueAtTime(freq * 0.75, t + 0.12);
     const g = ctx.createGain();
-    // exponentialRamp can't target 0, and a drained field makes 0.25·level → 0.
-    const amp = Math.max(0.0002, 0.25 * level);
+    // Mostly independent of FIELD so a tap always pings audibly, and never 0
+    // (exponentialRamp can't target 0).
+    const amp = 0.16 + 0.12 * level;
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(amp, t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);

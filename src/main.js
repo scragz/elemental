@@ -28,6 +28,29 @@ let fpsEMA = 60;
 
 window.__audio = audio; // debug handle
 
+// Optional on-screen diagnostics: open with ?debug (readable on a phone).
+const debugHud = /[?&]debug\b/.test(location.search) ? makeDebugHud() : null;
+function makeDebugHud() {
+  const el = document.createElement('pre');
+  el.style.cssText = [
+    'position:fixed', 'top:0', 'left:0', 'margin:0', 'padding:8px 10px',
+    'font:12px/1.45 ui-monospace,Menlo,monospace', 'color:#9fe',
+    'background:rgba(0,0,0,0.55)', 'z-index:10', 'pointer-events:none',
+    'white-space:pre', 'max-width:100vw', 'text-shadow:0 1px 2px #000',
+  ].join(';');
+  document.body.appendChild(el);
+  return el;
+}
+function updateDebugHud() {
+  const s = window.__elemental;
+  debugHud.textContent =
+    `audio ${s.audioState} | worklet ${s.workletOk} (${s.voiceKind})\n` +
+    (s.initError ? `initError: ${s.initError}\n` : '') +
+    `field ${s.field}  master ${s.masterGain}\n` +
+    `rings ${s.rings}  pairs ${s.voicedPairs}  voices ${s.busyVoices}/${s.busyVoices + s.freeVoices}\n` +
+    `contacts ${s.contacts}  fps ${s.fps}  sr ${s.sampleRate}`;
+}
+
 // ---- input (Pointer Events; multitouch supported, §11.5) ----
 
 function pointerDown(e) {
@@ -161,7 +184,12 @@ function loop() {
     freeVoices: audio.freeVoices ? audio.freeVoices.length : 0,
     masterGain: audio.master ? +audio.master.gain.value.toFixed(3) : null,
     sampleRate: audio.ctx ? audio.ctx.sampleRate : null,
+    workletOk: audio.workletOk ?? null,
+    voiceKind: audio.voices && audio.voices[0] ? audio.voices[0].kind : null,
+    initError: audio.initError ?? null,
   };
+
+  if (debugHud) updateDebugHud();
 
   requestAnimationFrame(loop);
 }

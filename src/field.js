@@ -18,18 +18,16 @@ export class Field {
   update(dt, s) {
     let d = 0;
 
-    if (s.pointerDown && s.moving) {
-      d -= FIELD.moveCostPerSec * s.normSpeed * dt;
-    }
-    if (s.collisionCount > 0) {
-      d -= FIELD.voiceCostPerSec * s.collisionIntensity * dt;
-    }
-
-    // Refills only when no pointer is down (holding still refills a little).
-    if (!s.pointerDown) {
+    if (s.pointerDown) {
+      // Costs apply only while actively playing.
+      if (s.moving) d -= FIELD.moveCostPerSec * s.normSpeed * dt;
+      if (s.collisionCount > 0) d -= FIELD.voiceCostPerSec * s.collisionIntensity * dt;
+      if (s.holdingStill) d += FIELD.refillHold * dt;
+    } else {
+      // Hands off: ALWAYS refill, even while rings keep colliding. Collisions no
+      // longer drain the field once you let go, so it always comes back up (a busy
+      // screen just refills a little slower). This is what makes "quiet" temporary.
       d += (s.collisionCount > 0 ? FIELD.refillBusy : FIELD.refillIdle) * dt;
-    } else if (s.holdingStill) {
-      d += FIELD.refillHold * dt;
     }
 
     this.level = clamp01(this.level + d);
