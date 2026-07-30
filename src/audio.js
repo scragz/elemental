@@ -6,7 +6,7 @@
 //
 // Voice pool of windowed wavetable scanners (see voice-worklet.js). Pairs allocate
 // up to two voices (one per contact point) on activation, freed on separation.
-import { MAX_PAIRS } from './config.js';
+import { MAX_PAIRS, ELEMENTS } from './config.js';
 import { clamp } from './util.js';
 
 const POOL_SIZE = MAX_PAIRS * 2;
@@ -231,29 +231,100 @@ export class AudioEngine {
     this.master.gain.setTargetAtTime(g, this.ctx.currentTime, 0.1);
   }
 
-  // Plop one-shot: pitch drop f·2.2 → f·0.75 over 120ms (§9).
-  plop(freq, panValue, level) {
+  // Subtle percussive tick on every pointerdown — a short bandpassed noise click.
+  tick(panValue = 0) {
     if (!this.ready) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(freq * 2.2, t);
-    osc.frequency.exponentialRampToValueAtTime(freq * 0.75, t + 0.12);
+    const dur = 0.03;
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 2200;
+    bp.Q.value = 0.7;
     const g = ctx.createGain();
-    // Mostly independent of FIELD so a tap always pings audibly, and never 0
-    // (exponentialRamp can't target 0).
-    const amp = 0.16 + 0.12 * level;
+    g.gain.value = 0.14;
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = clamp(panValue, -1, 1);
+    src.connect(bp).connect(g).connect(panner);
+    panner.connect(this.bus); // dry only — keep the tick crisp
+    src.start(t);
+    src.stop(t + dur);
+  }
+
+  // Element confirmation on commit — a distinct short voice per element (§4.1
+  // register + character), so choosing air/fire/water/earth sounds different.
+  elementSound(element, fundamental, panValue = 0) {
+    if (!this.ready || !element) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const base = fundamental * ELEMENTS[element].octave;
+    const osc = ctx.createOscillator();
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    const g = ctx.createGain();
+    let dur = 0.22, peak = 0.16;
+
+    if (element === 'air') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(base, t);
+      osc.frequency.exponentialRampToValueAtTime(base * 1.5, t + 0.14); // rises, escapes
+      lp.frequency.value = 9000; dur = 0.18; peak = 0.13;
+    } else if (element === 'fire') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(base, t);
+      osc.detune.setValueAtTime(0, t);
+      osc.detune.linearRampToValueAtTime(28, t + 0.2); // unstable
+      lp.frequency.value = 4800; dur = 0.22; peak = 0.15;
+    } else if (element === 'water') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(base * 0.72, t);
+      osc.frequency.exponentialRampToValueAtTime(base, t + 0.18); // glides up
+      lp.frequency.value = 3400; dur = 0.30; peak = 0.16;
+    } else { // earth
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(base, t);
+      osc.frequency.exponentialRampToValueAtTime(base * 0.9, t + 0.2); // settles low
+      lp.frequency.value = 2200; dur = 0.36; peak = 0.2;
+    }
+
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(amp, t + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = clamp(panValue, -1, 1);
+    osc.connect(lp).connect(g).connect(panner);
+    panner.connect(this.bus);
+    panner.connect(this.convolver);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  }
+
+  // Soft "let go" on release/cast — a quiet upward blip an octave up.
+  releaseSound(element, fundamental, panValue = 0) {
+    if (!this.ready) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const base = fundamental * ELEMENTS[element || 'null'].octave;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(base * 2, t);
+    osc.frequency.exponentialRampToValueAtTime(base * 2.6, t + 0.12);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.07, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
     const panner = ctx.createStereoPanner();
     panner.pan.value = clamp(panValue, -1, 1);
     osc.connect(g).connect(panner);
     panner.connect(this.bus);
     panner.connect(this.convolver);
     osc.start(t);
-    osc.stop(t + 0.24);
+    osc.stop(t + 0.22);
   }
 }
 
