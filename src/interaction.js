@@ -3,7 +3,7 @@
 // Contact exists when |r1-r2| ≤ d ≤ r1+r2. Two contact points at ±α from the
 // centre-to-centre line, each reading both rings. The interaction matrix is not
 // written — scrub rate, chirps and unisons all fall out of this geometry.
-import { MAX_PAIRS, VOICE_LEVEL } from './config.js';
+import { MAX_PAIRS, VOICE_LEVEL, FIELD_VOICE_FLOOR } from './config.js';
 import { env } from './env.js';
 import { clamp } from './util.js';
 
@@ -103,12 +103,16 @@ export class Interaction {
         pair.voices[idx] = v;
       }
 
-      // banked₁·banked₂·FIELD (§4.2). sqrt lifts the low end so quiet contacts are
-      // still audible while loud swells still dominate; VOICE_LEVEL sets absolute
-      // loudness. Envelopes fade the pair in/out over each ring's life.
+      // banked₁·banked₂ (§4.2). sqrt lifts the low end so quiet contacts are still
+      // audible while loud swells still dominate. FIELD only dims voices (floored),
+      // it never silences them, so a drained field is hushed rather than dead.
       const banked = Math.sqrt(r1.bankedAt(cp.a1) * r2.bankedAt(cp.a2));
-      const amp = clamp(banked * env1 * env2 * field, 0, 1) * VOICE_LEVEL;
-      intensity += amp;
+      const activity = clamp(banked * env1 * env2, 0, 1);
+      const fieldGain = FIELD_VOICE_FLOOR + (1 - FIELD_VOICE_FLOOR) * field;
+      const amp = activity * fieldGain * VOICE_LEVEL;
+      // Field cost tracks activity (not the boosted gain), and eases as field drops
+      // so a busy screen can still refill (§5).
+      intensity += activity * field;
 
       // Contact point screen position → pan + render.
       this.contactsThisFrame.push({ x: cp.x, y: cp.y, amp });
