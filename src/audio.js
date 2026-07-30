@@ -231,23 +231,26 @@ export class AudioEngine {
     this.master.gain.setTargetAtTime(g, this.ctx.currentTime, 0.1);
   }
 
-  // Subtle percussive tick on every pointerdown — a short bandpassed noise click.
+  // Very quiet, tight tick on every pointerdown — a short high click, not a snare.
   tick(panValue = 0) {
     if (!this.ready) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
-    const dur = 0.03;
+    const dur = 0.008; // very short → a click, not a burst
     const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
     const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    for (let i = 0; i < d.length; i++) {
+      const decay = Math.pow(1 - i / d.length, 3); // fast decay
+      d[i] = (Math.random() * 2 - 1) * decay;
+    }
     const src = ctx.createBufferSource();
     src.buffer = buf;
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.value = 2200;
-    bp.Q.value = 0.7;
+    bp.frequency.value = 3600; // higher → reads as a tick
+    bp.Q.value = 1.2;
     const g = ctx.createGain();
-    g.gain.value = 0.14;
+    g.gain.value = 0.04; // way quieter
     const panner = ctx.createStereoPanner();
     panner.pan.value = clamp(panValue, -1, 1);
     src.connect(bp).connect(g).connect(panner);
