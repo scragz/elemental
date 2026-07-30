@@ -51,7 +51,7 @@ export class Renderer {
     ctx.globalCompositeOperation = 'lighter';
 
     for (const r of rings) this._drawRing(ctx, r, segments);
-    for (const g of gestures) this._drawCharge(ctx, g);
+    for (const g of gestures) this._drawGesture(ctx, g);
     for (const cp of contacts) this._drawContact(ctx, cp);
 
     ctx.globalCompositeOperation = 'source-over';
@@ -120,27 +120,80 @@ export class Renderer {
     }
   }
 
-  _drawCharge(ctx, g) {
-    if (g.committed) return;
-    const glow = g.chargeGlow;
-    const rad = CHARGE_RADIUS * (1 + glow * 0.6 + g.charge * 0.15);
-    const col = this._elementColor('null', 60);
-    const grad = ctx.createRadialGradient(g.px, g.py, 0, g.px, g.py, rad * 2.4);
-    grad.addColorStop(0, `hsla(${col.h}, 20%, 85%, ${0.5 + glow * 0.4})`);
-    grad.addColorStop(1, 'hsla(0,0%,100%,0)');
-    ctx.fillStyle = grad;
+  // Live gesture feedback — light up the path, show the element on commit, and the
+  // drawing centre + reach ring so the gesture is legible as you make it.
+  _drawGesture(ctx, g) {
+    const committed = g.committed;
+    const col = committed
+      ? this._elementColor(g.element, 62)
+      : { h: 200, s: 25, l: 85 };
+
+    // Trail of where the finger has been.
+    const tr = g.trail;
+    if (tr && tr.length > 1) {
+      ctx.lineCap = 'round';
+      for (let i = 1; i < tr.length; i++) {
+        const f = i / tr.length; // brighter toward the head
+        ctx.strokeStyle = `hsla(${col.h}, ${col.s}%, ${col.l}%, ${0.45 * f})`;
+        ctx.lineWidth = 1 + 3.5 * f;
+        ctx.beginPath();
+        ctx.moveTo(tr[i - 1].x, tr[i - 1].y);
+        ctx.lineTo(tr[i].x, tr[i].y);
+        ctx.stroke();
+      }
+    }
+
+    if (committed) {
+      const cx = g.commitX, cy = g.commitY;
+      const rr = Math.hypot(g.px - cx, g.py - cy);
+      // Reach ring: the current radius is exactly what's being inscribed.
+      ctx.strokeStyle = `hsla(${col.h}, ${col.s}%, 65%, 0.45)`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(2, rr), 0, Math.PI * 2);
+      ctx.stroke();
+      // Spoke from centre to the pointer.
+      ctx.strokeStyle = `hsla(${col.h}, ${col.s}%, 72%, 0.3)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(g.px, g.py);
+      ctx.stroke();
+      // Centre marker.
+      ctx.fillStyle = `hsla(${col.h}, ${col.s}%, 82%, 0.85)`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Pre-commit charging disc.
+      const glow = g.chargeGlow;
+      const rad = CHARGE_RADIUS * (1 + glow * 0.6 + g.charge * 0.15) * 2.4;
+      const grad = ctx.createRadialGradient(g.px, g.py, 0, g.px, g.py, rad);
+      grad.addColorStop(0, `hsla(${col.h}, 25%, 90%, ${0.5 + glow * 0.4})`);
+      grad.addColorStop(1, 'hsla(0,0%,100%,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(g.px, g.py, rad, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Bright head at the current pointer, always.
+    const head = ctx.createRadialGradient(g.px, g.py, 0, g.px, g.py, 18);
+    head.addColorStop(0, `hsla(${col.h}, ${col.s}%, 92%, 0.9)`);
+    head.addColorStop(1, `hsla(${col.h}, ${col.s}%, 60%, 0)`);
+    ctx.fillStyle = head;
     ctx.beginPath();
-    ctx.arc(g.px, g.py, rad * 2.4, 0, Math.PI * 2);
+    ctx.arc(g.px, g.py, 18, 0, Math.PI * 2);
     ctx.fill();
   }
 
   _drawContact(ctx, cp) {
     const a = clamp01(cp.amp * 2.5);
     if (a <= 0.001) return;
-    const rad = 6 + a * 14;
+    const rad = 12 + a * 26; // bigger, easier-to-see collision glow
     const grad = ctx.createRadialGradient(cp.x, cp.y, 0, cp.x, cp.y, rad);
-    grad.addColorStop(0, `rgba(255, 250, 235, ${0.8 * a})`);
-    grad.addColorStop(0.4, `rgba(200, 220, 255, ${0.4 * a})`);
+    grad.addColorStop(0, `rgba(255, 250, 235, ${0.85 * a})`);
+    grad.addColorStop(0.35, `rgba(200, 220, 255, ${0.45 * a})`);
     grad.addColorStop(1, 'rgba(120,150,220,0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
@@ -155,7 +208,7 @@ export class Renderer {
     ctx.font = '300 18px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('tap and drag', env.w / 2, env.h / 2);
+    ctx.fillText('drag to cast a ring', env.w / 2, env.h / 2);
     ctx.restore();
   }
 }

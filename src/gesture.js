@@ -45,6 +45,7 @@ export class Gesture {
 
     // Charging visual state.
     this.chargeGlow = 0;
+    this.trail = [{ x, y }]; // recent pointer path, for "light up where you go"
   }
 
   // Pointer moved. Accumulate travel, speed, stillness. Returns true on the frame
@@ -59,6 +60,9 @@ export class Gesture {
     this.px = x;
     this.py = y;
     this.lastTime = time;
+
+    this.trail.push({ x, y });
+    if (this.trail.length > 64) this.trail.shift();
 
     if (!this.committed && this.travel > COMMIT_TRAVEL) {
       this._commit(x, y);

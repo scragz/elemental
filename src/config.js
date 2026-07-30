@@ -9,7 +9,7 @@ export const TABLE_SIZE   = 2048;  // baked playback wavetable length (§3)
 
 export const ANG_RATE = (2 * Math.PI) / LAP_DURATION; // rad/s, fixed write-head speed
 
-export const COMMIT_TRAVEL = 40;   // px — cumulative travel that commits a gesture (§1.2)
+export const COMMIT_TRAVEL = 24;   // px — cumulative travel that commits a gesture (§1.2)
 export const CHARGE_RADIUS = 8;    // px — pre-commit disc radius (§1.1)
 
 // Stillness (§2.1, §4, §5)
@@ -77,6 +77,11 @@ export const CAST_SPEED_REF = 1200; // px/s that maps to CAST_MULT_MAX
 // Safety caps (§5) — governor, not design.
 export const MAX_RINGS = 48;
 export const MAX_PAIRS = 12;
+
+// Contact tolerance (px). Rings read as "in contact" within this band of touching,
+// not only at exact circle intersection — bigger, longer-lasting collision targets
+// so meetings are easy to make and hear.
+export const CONTACT_PAD = 30;
 
 // Per-voice loudness. Contact amplitude is a product of sub-1 terms (banked,
 // envelopes, field); this lifts it back to an audible level. Compressor + master

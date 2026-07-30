@@ -3,7 +3,7 @@
 // Contact exists when |r1-r2| ≤ d ≤ r1+r2. Two contact points at ±α from the
 // centre-to-centre line, each reading both rings. The interaction matrix is not
 // written — scrub rate, chirps and unisons all fall out of this geometry.
-import { MAX_PAIRS, VOICE_LEVEL, FIELD_VOICE_FLOOR } from './config.js';
+import { MAX_PAIRS, VOICE_LEVEL, FIELD_VOICE_FLOOR, CONTACT_PAD } from './config.js';
 import { env } from './env.js';
 import { clamp } from './util.js';
 
@@ -33,7 +33,18 @@ export class Interaction {
       for (let j = i + 1; j < rings.length; j++) {
         const r2 = rings[j];
         const d = Math.hypot(r1.x - r2.x, r1.y - r2.y);
-        if (d < Math.abs(r1.r - r2.r) || d > r1.r + r2.r || d < 1e-3) continue;
+        if (d < 1e-3) continue;
+        const sum = r1.r + r2.r;
+        const diff = Math.abs(r1.r - r2.r);
+        // Padded contact window: touch counts within CONTACT_PAD of intersecting,
+        // so collisions are easier to make and linger longer.
+        if (d > sum + CONTACT_PAD || d < diff - CONTACT_PAD) continue;
+
+        // Proximity: 1 while truly intersecting, fading to 0 at the pad edge.
+        let prox = 1;
+        if (d > sum) prox = 1 - (d - sum) / CONTACT_PAD;
+        else if (d < diff) prox = 1 - (diff - d) / CONTACT_PAD;
+        prox = clamp(prox, 0, 1);
 
         const geo = contactGeometry(r1, r2, d);
         if (!geo) continue;
@@ -45,8 +56,8 @@ export class Interaction {
         for (const cp of geo) {
           amp += r1.bankedAt(cp.a1) * r2.bankedAt(cp.a2);
         }
-        amp *= 0.5 * env1 * env2 * field;
-        active.push({ r1, r2, geo, amp });
+        amp *= 0.5 * env1 * env2 * field * (0.4 + 0.6 * prox);
+        active.push({ r1, r2, geo, amp, prox });
       }
     }
 
@@ -79,7 +90,7 @@ export class Interaction {
   }
 
   _voicePair(pair, item, fundamental, field) {
-    const { r1, r2, geo } = item;
+    const { r1, r2, geo, prox } = item;
     const env1 = r1.envelope();
     const env2 = r2.envelope();
     const freqA = r1.pitch(fundamental);
@@ -107,7 +118,7 @@ export class Interaction {
       // audible while loud swells still dominate. FIELD only dims voices (floored),
       // it never silences them, so a drained field is hushed rather than dead.
       const banked = Math.sqrt(r1.bankedAt(cp.a1) * r2.bankedAt(cp.a2));
-      const activity = clamp(banked * env1 * env2, 0, 1);
+      const activity = clamp(banked * env1 * env2 * (0.4 + 0.6 * prox), 0, 1);
       const fieldGain = FIELD_VOICE_FLOOR + (1 - FIELD_VOICE_FLOOR) * field;
       const amp = activity * fieldGain * VOICE_LEVEL;
       // Field cost tracks activity (not the boosted gain), and eases as field drops
