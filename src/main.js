@@ -53,22 +53,26 @@ function updateDebugHud() {
 
 // ---- input (Pointer Events; multitouch supported, §11.5) ----
 
+// Start (or resume) the audio context, returning a promise that resolves once it's
+// ready. Fixes the silent first tap: init() is async, so the first tick has to wait.
+let audioStarting = null;
+function ensureAudio() {
+  if (audio.ready) { audio.resume(); return Promise.resolve(); }
+  if (!audioStarting) audioStarting = audio.init().then(() => audio.resume());
+  return audioStarting;
+}
+
 function pointerDown(e) {
   const t = performance.now() / 1000;
-  if (!audio.ready) {
-    audio.init().then(() => audio.resume());
-  } else {
-    audio.resume();
-  }
   if (!firstTapped) firstTapped = true;
 
   const g = new Gesture(e.clientX, e.clientY, t);
   gestures.set(e.pointerId, g);
 
   field.plop();
-  // Plop one-shot at a neutral pitch, panned to the tap (§9).
   const pan = (e.clientX / env.w) * 2 - 1;
-  audio.plop(tuning.fundamental * 1.5, pan, field.level);
+  // Subtle tick on every tap — plays as soon as audio is ready (first tap included).
+  ensureAudio().then(() => audio.tick(pan));
 }
 
 function pointerMove(e) {
@@ -77,7 +81,14 @@ function pointerMove(e) {
   const t = performance.now() / 1000;
   // Coalesced events give smoother travel/speed on fast flicks.
   const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
-  for (const ev of events) g.moveTo(ev.clientX, ev.clientY, t);
+  for (const ev of events) {
+    const committed = g.moveTo(ev.clientX, ev.clientY, t);
+    if (committed) {
+      // Element chosen by the initial slide — sound its distinct voice.
+      const pan = (ev.clientX / env.w) * 2 - 1;
+      audio.elementSound(g.element, tuning.fundamental, pan);
+    }
+  }
 }
 
 function pointerUp(e) {
@@ -88,6 +99,10 @@ function pointerUp(e) {
   const baked = g.bake();
   if (rings.length >= MAX_RINGS) rings.shift(); // safety cap (§5)
   rings.push(new Ring(baked, g.speed, field.level));
+
+  // Soft "let go" on release.
+  const pan = (e.clientX / env.w) * 2 - 1;
+  audio.releaseSound(g.element, tuning.fundamental, pan);
 }
 
 canvas.addEventListener('pointerdown', pointerDown);
