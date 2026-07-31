@@ -1,6 +1,8 @@
-// ELEMENTAL — FX orb. A small control in the bottom-right corner: drag it as an
-// XY pad — left/right sets reverb, up/down sets delay. Purely a control; it does
-// not cast spells.
+// ELEMENTAL — FX pinch. Two fingers control the effects as a 2D "zoom":
+//   spread/pinch horizontally → reverb   (finger gap on X)
+//   spread/pinch vertically   → delay     (finger gap on Y)
+// A crosshair at the midpoint shows both values. Single-finger touches still cast
+// spells; only a second finger enters FX mode.
 import { env } from './env.js';
 import { clamp01 } from './util.js';
 
@@ -9,50 +11,46 @@ export class Fx {
     this.audio = audio;
     this.reverb = 0.4; // matches the audio node defaults on init
     this.delay = 0.0;
-    this.dragId = null; // pointerId currently controlling the orb
-    this.startX = 0;
-    this.startY = 0;
-    this.startReverb = 0;
-    this.startDelay = 0;
-    this.glow = 0; // 0..1 activity glow for rendering
+    this.active = false;
+    this.p0 = null; // live positions of the two pinch fingers
+    this.p1 = null;
+    this.baseSpreadX = 0;
+    this.baseSpreadY = 0;
+    this.baseReverb = 0;
+    this.baseDelay = 0;
+    this.glow = 0; // fades the indicator out after release
   }
 
-  // Orb geometry — inset from the corner (and clear of the phone's bottom home
-  // indicator) so it's comfortable to reach without hugging the edge.
-  orb() {
-    const r = Math.max(24, Math.min(36, Math.min(env.w, env.h) * 0.055));
-    const mx = 46;
-    const my = 60;
-    return { x: env.w - r - mx, y: env.h - r - my, r };
+  // Change in finger spread needed to sweep a parameter across its whole range.
+  _scale() {
+    return Math.min(env.w, env.h) * 0.5;
   }
 
-  hitTest(x, y) {
-    const o = this.orb();
-    // Generous hit radius so it's easy to grab with a thumb.
-    return Math.hypot(x - o.x, y - o.y) <= o.r + 26;
-  }
-
-  begin(id, x, y) {
-    this.dragId = id;
-    this.startX = x;
-    this.startY = y;
-    this.startReverb = this.reverb;
-    this.startDelay = this.delay;
+  begin(a, b) {
+    this.active = true;
+    this.p0 = { x: a.x, y: a.y };
+    this.p1 = { x: b.x, y: b.y };
+    this.baseSpreadX = Math.abs(a.x - b.x);
+    this.baseSpreadY = Math.abs(a.y - b.y);
+    this.baseReverb = this.reverb;
+    this.baseDelay = this.delay;
     this.glow = 1;
   }
 
-  // Move the control; full range spans ~55% of the screen in each axis.
-  drag(x, y) {
-    const spanX = env.w * 0.55;
-    const spanY = env.h * 0.55;
-    this.reverb = clamp01(this.startReverb + (x - this.startX) / spanX);
-    this.delay = clamp01(this.startDelay + (this.startY - y) / spanY); // up = more
+  update(a, b) {
+    if (!this.active) return;
+    this.p0 = { x: a.x, y: a.y };
+    this.p1 = { x: b.x, y: b.y };
+    const s = this._scale();
+    this.reverb = clamp01(this.baseReverb + (Math.abs(a.x - b.x) - this.baseSpreadX) / s);
+    this.delay = clamp01(this.baseDelay + (Math.abs(a.y - b.y) - this.baseSpreadY) / s);
     this.audio.setReverb(this.reverb);
     this.audio.setDelay(this.delay);
+    this.glow = 1;
   }
 
   end() {
-    this.dragId = null;
+    this.active = false;
   }
 
   // Push current values to audio once it's ready (call after unlock).
@@ -61,8 +59,7 @@ export class Fx {
     this.audio.setDelay(this.delay);
   }
 
-  // Decay the activity glow (called per frame with dt).
   tick(dt) {
-    if (this.dragId === null) this.glow = Math.max(0, this.glow - dt * 1.5);
+    if (!this.active) this.glow = Math.max(0, this.glow - dt * 2);
   }
 }

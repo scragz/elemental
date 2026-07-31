@@ -56,69 +56,54 @@ export class Renderer {
 
     ctx.globalCompositeOperation = 'source-over';
 
-    if (fx) this._drawOrb(ctx, fx);
+    if (fx) this._drawFx(ctx, fx);
   }
 
-  // FX orb (bottom-right): reverb halo (left/right), delay echo rings (up/down),
-  // with value bars while it's being dragged.
-  _drawOrb(ctx, fx) {
-    const o = fx.orb();
-    const rev = fx.reverb, del = fx.delay;
-    const active = fx.dragId !== null ? 1 : fx.glow;
+  // FX pinch indicator: a crosshair at the midpoint of the two fingers whose
+  // horizontal arm = reverb and vertical arm = delay, over faint full-scale tracks,
+  // with a connector and a glowing dot on each finger.
+  _drawFx(ctx, fx) {
+    const g = fx.active ? 1 : fx.glow;
+    if (g <= 0.01 || !fx.p0 || !fx.p1) return;
+    const a = fx.p0, b = fx.p1;
+    const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     const TWO_PI = Math.PI * 2;
+    const L = 90; // full-scale arm length in px
 
     ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
 
-    // Reverb halo — larger, softer with more reverb.
-    const haloR = o.r * (1.3 + rev * 2.8);
-    const halo = ctx.createRadialGradient(o.x, o.y, o.r * 0.3, o.x, o.y, haloR);
-    halo.addColorStop(0, `rgba(150, 200, 255, ${0.10 + 0.20 * rev})`);
-    halo.addColorStop(1, 'rgba(120, 160, 255, 0)');
-    ctx.fillStyle = halo;
-    ctx.beginPath();
-    ctx.arc(o.x, o.y, haloR, 0, TWO_PI);
-    ctx.fill();
+    // Connector between the two fingers.
+    ctx.strokeStyle = `rgba(150, 200, 255, ${0.22 * g})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
 
-    // Delay — concentric echo rings.
-    const echoes = Math.round(del * 4);
-    for (let i = 1; i <= echoes; i++) {
-      const rr = o.r + i * (o.r * 0.55);
-      ctx.strokeStyle = `rgba(180, 220, 255, ${0.2 * del * (1 - i / (echoes + 1))})`;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(o.x, o.y, rr, 0, TWO_PI);
-      ctx.stroke();
+    // Glowing dot on each finger.
+    for (const p of [a, b]) {
+      const gr = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 15);
+      gr.addColorStop(0, `rgba(225, 240, 255, ${0.8 * g})`);
+      gr.addColorStop(1, 'rgba(150, 200, 255, 0)');
+      ctx.fillStyle = gr;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 15, 0, TWO_PI); ctx.fill();
     }
 
-    // Core orb.
-    const core = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r);
-    core.addColorStop(0, 'rgba(240, 250, 255, 0.95)');
-    core.addColorStop(0.5, 'rgba(150, 190, 255, 0.6)');
-    core.addColorStop(1, 'rgba(120, 160, 255, 0)');
-    ctx.fillStyle = core;
-    ctx.beginPath();
-    ctx.arc(o.x, o.y, o.r, 0, TWO_PI);
-    ctx.fill();
+    // Full-scale tracks.
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.12 * g})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(m.x - L, m.y); ctx.lineTo(m.x + L, m.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(m.x, m.y - L); ctx.lineTo(m.x, m.y + L); ctx.stroke();
 
-    // Value bars while active: horizontal = reverb (above), vertical = delay (left).
-    if (active > 0.01) {
-      const a = active;
-      const bw = o.r * 2.6;
-      const bx = o.x - bw / 2, by = o.y - o.r - 16;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = `rgba(255,255,255,${0.14 * a})`;
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + bw, by); ctx.stroke();
-      ctx.strokeStyle = `rgba(150,200,255,${0.9 * a})`;
-      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + bw * rev, by); ctx.stroke();
+    // Reverb (horizontal) and delay (vertical) fills.
+    const rl = L * fx.reverb;
+    ctx.strokeStyle = `rgba(120, 190, 255, ${0.95 * g})`;
+    ctx.beginPath(); ctx.moveTo(m.x - rl, m.y); ctx.lineTo(m.x + rl, m.y); ctx.stroke();
+    const dl = L * fx.delay;
+    ctx.strokeStyle = `rgba(185, 225, 255, ${0.95 * g})`;
+    ctx.beginPath(); ctx.moveTo(m.x, m.y - dl); ctx.lineTo(m.x, m.y + dl); ctx.stroke();
 
-      const bh = o.r * 2.6;
-      const vx = o.x - o.r - 16, vy = o.y + bh / 2;
-      ctx.strokeStyle = `rgba(255,255,255,${0.14 * a})`;
-      ctx.beginPath(); ctx.moveTo(vx, vy); ctx.lineTo(vx, vy - bh); ctx.stroke();
-      ctx.strokeStyle = `rgba(180,220,255,${0.9 * a})`;
-      ctx.beginPath(); ctx.moveTo(vx, vy); ctx.lineTo(vx, vy - bh * del); ctx.stroke();
-    }
+    // Centre dot.
+    ctx.fillStyle = `rgba(240, 250, 255, ${0.9 * g})`;
+    ctx.beginPath(); ctx.arc(m.x, m.y, 3, 0, TWO_PI); ctx.fill();
 
     ctx.globalCompositeOperation = 'source-over';
   }
