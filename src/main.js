@@ -9,6 +9,8 @@ import { Ring } from './ring.js';
 import { AudioEngine } from './audio.js';
 import { Interaction } from './interaction.js';
 import { Renderer } from './render.js';
+import { Splash } from './splash.js';
+import { Demo } from './demo.js';
 
 const canvas = document.getElementById('c');
 const field = new Field();
@@ -16,11 +18,15 @@ const tuning = new Tuning();
 const audio = new AudioEngine();
 const interaction = new Interaction(audio);
 const renderer = new Renderer(canvas);
+const splash = new Splash();
+const demo = new Demo({ gestures: null, rings: null, tuning, audio, interaction, splash });
 
 const rings = [];
 const gestures = new Map(); // pointerId → Gesture
+// Give the demo the real containers now that they exist.
+demo.gestures = gestures;
+demo.rings = rings;
 
-let firstRun = 1;          // first-run text alpha; fades on first tap, never returns
 let firstTapped = false;
 let lastT = performance.now() / 1000;
 let sedimentClock = 0;
@@ -73,7 +79,11 @@ function ensureAudio() {
 
 function pointerDown(e) {
   const t = performance.now() / 1000;
-  if (!firstTapped) firstTapped = true;
+  if (!firstTapped) {
+    firstTapped = true;
+    splash.fadeOut(); // they're interacting — clear the intro fast
+    demo.stop();
+  }
 
   const g = new Gesture(e.clientX, e.clientY, t);
   gestures.set(e.pointerId, g);
@@ -137,13 +147,18 @@ function loop() {
   if (dt > 0.1) dt = 0.1; // clamp long stalls
 
   tuning.update(dt);
+  demo.update(dt); // self-playing intro (no-op once stopped)
 
-  // Advance gestures (charge + inscription).
+  // Advance gestures (charge + inscription). Ghost (demo) gestures tick too, but
+  // don't count toward the field economy.
   let anyMoving = false;
   let anyHoldingStill = false;
   let maxNormSpeed = 0;
+  let realDown = 0;
   for (const g of gestures.values()) {
     g.tick(dt);
+    if (g.demo) continue;
+    realDown++;
     const ns = clamp01(g.speed / SPEED_REF);
     maxNormSpeed = Math.max(maxNormSpeed, ns);
     if (g.speed >= 40) anyMoving = true; else anyHoldingStill = true;
@@ -155,20 +170,19 @@ function loop() {
     if (rings[i].dead) rings.splice(i, 1);
   }
 
-  // Interactions → voices.
-  if (audio.ready) {
-    interaction.update(rings, tuning.fundamental, field.level);
-    audio.setField(field.level);
-  }
+  // Interactions → contact glows always (so the demo's collision is visible before
+  // audio unlocks); voice allocation inside no-ops until the pool exists.
+  interaction.update(rings, tuning.fundamental, field.level);
+  if (audio.ready) audio.setField(field.level);
 
-  // Field economy.
+  // Field economy (ghost gestures excluded — they aren't the player).
   field.update(dt, {
-    pointerDown: gestures.size > 0,
+    pointerDown: realDown > 0,
     moving: anyMoving,
     normSpeed: maxNormSpeed,
     collisionCount: interaction.count,
     collisionIntensity: interaction.intensity,
-    holdingStill: gestures.size > 0 && !anyMoving && anyHoldingStill,
+    holdingStill: realDown > 0 && !anyMoving && anyHoldingStill,
   });
 
   // Deposit sediment at contact points, sparingly (§7).
@@ -180,9 +194,6 @@ function loop() {
     }
   }
 
-  // First-run text fades on first tap and never returns (§10).
-  if (firstTapped) firstRun = Math.max(0, firstRun - dt * 1.2);
-
   if (dt > 0) fpsEMA = fpsEMA * 0.9 + (1 / dt) * 0.1;
 
   renderer.frame({
@@ -191,7 +202,6 @@ function loop() {
     gestures: [...gestures.values()],
     contacts: interaction.contactsThisFrame,
     now,
-    firstRun,
     fps: fpsEMA,
   });
 
