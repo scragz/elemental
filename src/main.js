@@ -10,6 +10,7 @@ import { AudioEngine } from './audio.js';
 import { Interaction } from './interaction.js';
 import { Renderer } from './render.js';
 import { Splash } from './splash.js';
+import { Fx } from './fx.js';
 
 const canvas = document.getElementById('c');
 const field = new Field();
@@ -18,6 +19,7 @@ const audio = new AudioEngine();
 const interaction = new Interaction(audio);
 const renderer = new Renderer(canvas);
 const splash = new Splash();
+const fx = new Fx(audio);
 
 const rings = [];
 const gestures = new Map(); // pointerId → Gesture
@@ -28,6 +30,7 @@ let sedimentClock = 0;
 let fpsEMA = 60;
 
 window.__audio = audio; // debug handle
+window.__fx = fx;       // debug handle
 
 // Optional on-screen diagnostics: open with ?debug (readable on a phone).
 const debugHud = /[?&]debug\b/.test(location.search) ? makeDebugHud() : null;
@@ -72,8 +75,40 @@ function ensureAudio() {
   return audioStarting;
 }
 
+const activePointers = new Map(); // id → {x,y} — all fingers currently down
+let pinchIds = null;              // [id, id] of the two fingers controlling FX
+
+function pickPinchPair() {
+  const ids = [...activePointers.keys()];
+  return ids.length >= 2 ? [ids[0], ids[1]] : null;
+}
+function updatePinch() {
+  if (!pinchIds) return;
+  const a = activePointers.get(pinchIds[0]);
+  const b = activePointers.get(pinchIds[1]);
+  if (a && b) fx.update(a, b);
+}
+
 function pointerDown(e) {
   const t = performance.now() / 1000;
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  // A second finger enters FX pinch mode: cancel any in-progress spell(s) and
+  // take over. Horizontal spread → reverb, vertical spread → delay.
+  if (activePointers.size >= 2) {
+    if (!fx.active) {
+      for (const id of gestures.keys()) gestures.delete(id); // no cast for those
+      pinchIds = pickPinchPair();
+      const a = activePointers.get(pinchIds[0]);
+      const b = activePointers.get(pinchIds[1]);
+      fx.begin(a, b);
+      ensureAudio().then(() => fx.apply());
+      haptic(8);
+    }
+    return;
+  }
+
+  // Single finger → cast a spell.
   if (!firstTapped) firstTapped = true;
   splash.onTap(); // a tap clears the stage-2 hint (harmless otherwise)
 
@@ -88,6 +123,11 @@ function pointerDown(e) {
 }
 
 function pointerMove(e) {
+  const ap = activePointers.get(e.pointerId);
+  if (ap) { ap.x = e.clientX; ap.y = e.clientY; }
+
+  if (fx.active) { updatePinch(); return; }
+
   const g = gestures.get(e.pointerId);
   if (!g) return;
   const t = performance.now() / 1000;
@@ -105,6 +145,14 @@ function pointerMove(e) {
 }
 
 function pointerUp(e) {
+  activePointers.delete(e.pointerId);
+
+  if (fx.active) {
+    if (activePointers.size < 2) { fx.end(); pinchIds = null; }
+    else { pinchIds = pickPinchPair(); } // a pinch finger lifted; keep controlling
+    return;
+  }
+
   const g = gestures.get(e.pointerId);
   if (!g) return;
   gestures.delete(e.pointerId);
@@ -141,6 +189,7 @@ function loop() {
   if (dt > 0.1) dt = 0.1; // clamp long stalls
 
   tuning.update(dt);
+  fx.tick(dt);
 
   // Advance gestures (charge + inscription).
   let anyMoving = false;
@@ -192,6 +241,7 @@ function loop() {
     contacts: interaction.contactsThisFrame,
     now,
     fps: fpsEMA,
+    fx,
   });
 
   // Lightweight diagnostic snapshot (harmless; read by tests / curious consoles).

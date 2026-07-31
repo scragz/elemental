@@ -30,9 +30,11 @@ const STYLE = `
     0 0 34px #ff2d9b,             /* neon pink outer glow */
     0 0 66px #ff1e90;
   animation: splash-flicker 4.5s ease-in-out infinite;
-  transition: opacity 0.5s ease, transform 0.5s ease;
+  transition: opacity 0.45s ease;
 }
-#splash-title.dim { opacity: 0; transform: translateY(-2vh) scale(0.98); }
+/* Stop the flicker animation so it stops overriding opacity, then fade cleanly in
+   place (no upward drift) — matches how the help line crossfades. */
+#splash-title.dim { animation: none; opacity: 0; }
 #splash-sub {
   font-size: clamp(15px, 4.6vw, 23px);
   line-height: 1.7;

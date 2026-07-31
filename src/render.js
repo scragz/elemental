@@ -30,7 +30,7 @@ export class Renderer {
 
   frame(state) {
     const ctx = this.ctx;
-    const { field, rings, gestures, contacts, now, fps } = state;
+    const { field, rings, gestures, contacts, now, fps, fx } = state;
 
     // Self-throttle stroke resolution on slow frames so heavy fields stay smooth.
     let segments = SEGMENTS_MAX;
@@ -53,6 +53,57 @@ export class Renderer {
     for (const r of rings) this._drawRing(ctx, r, segments);
     for (const g of gestures) this._drawGesture(ctx, g);
     for (const cp of contacts) this._drawContact(ctx, cp);
+
+    ctx.globalCompositeOperation = 'source-over';
+
+    if (fx) this._drawFx(ctx, fx);
+  }
+
+  // FX pinch indicator: a crosshair at the midpoint of the two fingers whose
+  // horizontal arm = reverb and vertical arm = delay, over faint full-scale tracks,
+  // with a connector and a glowing dot on each finger.
+  _drawFx(ctx, fx) {
+    const g = fx.active ? 1 : fx.glow;
+    if (g <= 0.01 || !fx.p0 || !fx.p1) return;
+    const a = fx.p0, b = fx.p1;
+    const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const TWO_PI = Math.PI * 2;
+    const L = 90; // full-scale arm length in px
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+
+    // Connector between the two fingers.
+    ctx.strokeStyle = `rgba(150, 200, 255, ${0.22 * g})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+
+    // Glowing dot on each finger.
+    for (const p of [a, b]) {
+      const gr = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 15);
+      gr.addColorStop(0, `rgba(225, 240, 255, ${0.8 * g})`);
+      gr.addColorStop(1, 'rgba(150, 200, 255, 0)');
+      ctx.fillStyle = gr;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 15, 0, TWO_PI); ctx.fill();
+    }
+
+    // Full-scale tracks.
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.12 * g})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(m.x - L, m.y); ctx.lineTo(m.x + L, m.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(m.x, m.y - L); ctx.lineTo(m.x, m.y + L); ctx.stroke();
+
+    // Reverb (horizontal) and delay (vertical) fills.
+    const rl = L * fx.reverb;
+    ctx.strokeStyle = `rgba(120, 190, 255, ${0.95 * g})`;
+    ctx.beginPath(); ctx.moveTo(m.x - rl, m.y); ctx.lineTo(m.x + rl, m.y); ctx.stroke();
+    const dl = L * fx.delay;
+    ctx.strokeStyle = `rgba(185, 225, 255, ${0.95 * g})`;
+    ctx.beginPath(); ctx.moveTo(m.x, m.y - dl); ctx.lineTo(m.x, m.y + dl); ctx.stroke();
+
+    // Centre dot.
+    ctx.fillStyle = `rgba(240, 250, 255, ${0.9 * g})`;
+    ctx.beginPath(); ctx.arc(m.x, m.y, 3, 0, TWO_PI); ctx.fill();
 
     ctx.globalCompositeOperation = 'source-over';
   }
