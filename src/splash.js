@@ -1,6 +1,14 @@
 // ELEMENTAL — splash / onboarding overlay. Neon title + help text in Cantrip Mono,
-// drawn as a DOM layer above the canvas so the glow (text-shadow) is cheap. Fades
-// out fast on first real interaction.
+// drawn as a DOM layer above the canvas so the glow (text-shadow) is cheap.
+//
+// Two stages, driven by the player's own actions (which is also what unlocks audio):
+//   stage 1: logo + "drag to choose an element, release to cast a ripple"
+//   → on their first cast, the logo fades and the line becomes the next hint
+//   stage 2: "now let your ripples cross to make sound"
+//   → dismissed by the next tap, or on its own after a short while.
+
+const STAGE1 = 'drag to choose an element,\nrelease to cast a ripple';
+const STAGE2 = 'now let your ripples cross\nto make sound';
 
 const STYLE = `
 #splash {
@@ -8,7 +16,7 @@ const STYLE = `
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 4.5vh; text-align: center; padding: 0 6vw;
   pointer-events: none;
-  transition: opacity 0.4s ease;
+  transition: opacity 0.45s ease;
   font-family: 'Cantrip Mono', ui-monospace, Menlo, monospace;
 }
 #splash.hide { opacity: 0; }
@@ -22,30 +30,30 @@ const STYLE = `
     0 0 34px #ff2d9b,             /* neon pink outer glow */
     0 0 66px #ff1e90;
   animation: splash-flicker 4.5s ease-in-out infinite;
+  transition: opacity 0.5s ease, transform 0.5s ease;
 }
+#splash-title.dim { opacity: 0; transform: translateY(-2vh) scale(0.98); }
 #splash-sub {
-  font-size: clamp(14px, 4.3vw, 22px);
-  line-height: 1.75;
+  font-size: clamp(15px, 4.6vw, 23px);
+  line-height: 1.7;
   letter-spacing: 0.05em;
   color: #ddd7c8;                 /* dusty white */
   text-shadow: 0 0 6px rgba(255, 225, 244, 0.22);
-  opacity: 0.9;
+  white-space: pre-line;
   max-width: 90vw;
+  transition: opacity 0.35s ease;
 }
+#splash-sub.swap { opacity: 0; }
 @keyframes splash-flicker {
   0%, 100% { opacity: 1; }
-  47% { opacity: 1; }
-  48% { opacity: 0.82; }
-  49% { opacity: 1; }
-  92% { opacity: 1; }
-  93% { opacity: 0.88; }
-  94% { opacity: 1; }
+  47% { opacity: 1; } 48% { opacity: 0.82; } 49% { opacity: 1; }
+  92% { opacity: 1; } 93% { opacity: 0.88; } 94% { opacity: 1; }
 }
 `;
 
 export class Splash {
   constructor() {
-    this.faded = false;
+    this.stage = 1;
     this._loadFont();
 
     const style = document.createElement('style');
@@ -59,7 +67,7 @@ export class Splash {
     this.title.textContent = 'ELEMENTAL';
     this.sub = document.createElement('div');
     this.sub.id = 'splash-sub';
-    this.sub.textContent = 'cast spells to create music';
+    this.sub.textContent = STAGE1;
     this.el.appendChild(this.title);
     this.el.appendChild(this.sub);
     document.body.appendChild(this.el);
@@ -73,21 +81,32 @@ export class Splash {
     } catch (_) { /* ignore */ }
   }
 
-  // Swap the help line for the how-to, once the demo has shown a collision.
-  showInstructions() {
-    if (this.faded || this._instructed) return;
-    this._instructed = true;
-    this.sub.innerHTML =
-      'drag to choose your elemental<br>' +
-      'gesture to build a spell<br>' +
-      'release to cast';
+  // First cast (a ripple was released): drop the logo, swap in the stage-2 hint.
+  onCast() {
+    if (this.stage !== 1) return;
+    this.stage = 2;
+    this.title.classList.add('dim');
+    setTimeout(() => { this.title.style.display = 'none'; }, 520);
+    // Crossfade the help line.
+    this.sub.classList.add('swap');
+    setTimeout(() => {
+      this.sub.textContent = STAGE2;
+      this.sub.classList.remove('swap');
+    }, 360);
+    // Fades on its own if they don't tap again.
+    this._auto = setTimeout(() => this.dismiss(), 7000);
   }
 
-  // Fade out fast on first real interaction, then remove.
-  fadeOut() {
-    if (this.faded) return;
-    this.faded = true;
+  // A tap while stage 2 is showing clears it.
+  onTap() {
+    if (this.stage === 2) this.dismiss();
+  }
+
+  dismiss() {
+    if (this.stage === 3) return;
+    this.stage = 3;
+    clearTimeout(this._auto);
     this.el.classList.add('hide');
-    setTimeout(() => this.el.remove(), 500);
+    setTimeout(() => this.el.remove(), 550);
   }
 }

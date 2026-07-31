@@ -10,7 +10,6 @@ import { AudioEngine } from './audio.js';
 import { Interaction } from './interaction.js';
 import { Renderer } from './render.js';
 import { Splash } from './splash.js';
-import { Demo } from './demo.js';
 
 const canvas = document.getElementById('c');
 const field = new Field();
@@ -19,13 +18,9 @@ const audio = new AudioEngine();
 const interaction = new Interaction(audio);
 const renderer = new Renderer(canvas);
 const splash = new Splash();
-const demo = new Demo({ gestures: null, rings: null, tuning, audio, interaction, splash });
 
 const rings = [];
 const gestures = new Map(); // pointerId → Gesture
-// Give the demo the real containers now that they exist.
-demo.gestures = gestures;
-demo.rings = rings;
 
 let firstTapped = false;
 let lastT = performance.now() / 1000;
@@ -79,11 +74,8 @@ function ensureAudio() {
 
 function pointerDown(e) {
   const t = performance.now() / 1000;
-  if (!firstTapped) {
-    firstTapped = true;
-    splash.fadeOut(); // they're interacting — clear the intro fast
-    demo.stop();
-  }
+  if (!firstTapped) firstTapped = true;
+  splash.onTap(); // a tap clears the stage-2 hint (harmless otherwise)
 
   const g = new Gesture(e.clientX, e.clientY, t);
   gestures.set(e.pointerId, g);
@@ -125,6 +117,8 @@ function pointerUp(e) {
   const pan = (e.clientX / env.w) * 2 - 1;
   audio.releaseSound(g.element, tuning.fundamental, pan);
   haptic(10);
+
+  splash.onCast(); // first ripple cast → advance the intro to its second hint
 }
 
 canvas.addEventListener('pointerdown', pointerDown);
@@ -147,18 +141,13 @@ function loop() {
   if (dt > 0.1) dt = 0.1; // clamp long stalls
 
   tuning.update(dt);
-  demo.update(dt); // self-playing intro (no-op once stopped)
 
-  // Advance gestures (charge + inscription). Ghost (demo) gestures tick too, but
-  // don't count toward the field economy.
+  // Advance gestures (charge + inscription).
   let anyMoving = false;
   let anyHoldingStill = false;
   let maxNormSpeed = 0;
-  let realDown = 0;
   for (const g of gestures.values()) {
     g.tick(dt);
-    if (g.demo) continue;
-    realDown++;
     const ns = clamp01(g.speed / SPEED_REF);
     maxNormSpeed = Math.max(maxNormSpeed, ns);
     if (g.speed >= 40) anyMoving = true; else anyHoldingStill = true;
@@ -170,19 +159,19 @@ function loop() {
     if (rings[i].dead) rings.splice(i, 1);
   }
 
-  // Interactions → contact glows always (so the demo's collision is visible before
-  // audio unlocks); voice allocation inside no-ops until the pool exists.
+  // Interactions → voices (contact glows populate even before audio unlocks;
+  // voice allocation inside no-ops until the pool exists).
   interaction.update(rings, tuning.fundamental, field.level);
   if (audio.ready) audio.setField(field.level);
 
-  // Field economy (ghost gestures excluded — they aren't the player).
+  // Field economy.
   field.update(dt, {
-    pointerDown: realDown > 0,
+    pointerDown: gestures.size > 0,
     moving: anyMoving,
     normSpeed: maxNormSpeed,
     collisionCount: interaction.count,
     collisionIntensity: interaction.intensity,
-    holdingStill: realDown > 0 && !anyMoving && anyHoldingStill,
+    holdingStill: gestures.size > 0 && !anyMoving && anyHoldingStill,
   });
 
   // Deposit sediment at contact points, sparingly (§7).
