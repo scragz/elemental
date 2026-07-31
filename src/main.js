@@ -10,6 +10,7 @@ import { AudioEngine } from './audio.js';
 import { Interaction } from './interaction.js';
 import { Renderer } from './render.js';
 import { Splash } from './splash.js';
+import { Fx } from './fx.js';
 
 const canvas = document.getElementById('c');
 const field = new Field();
@@ -18,6 +19,7 @@ const audio = new AudioEngine();
 const interaction = new Interaction(audio);
 const renderer = new Renderer(canvas);
 const splash = new Splash();
+const fx = new Fx(audio);
 
 const rings = [];
 const gestures = new Map(); // pointerId → Gesture
@@ -28,6 +30,7 @@ let sedimentClock = 0;
 let fpsEMA = 60;
 
 window.__audio = audio; // debug handle
+window.__fx = fx;       // debug handle
 
 // Optional on-screen diagnostics: open with ?debug (readable on a phone).
 const debugHud = /[?&]debug\b/.test(location.search) ? makeDebugHud() : null;
@@ -74,6 +77,15 @@ function ensureAudio() {
 
 function pointerDown(e) {
   const t = performance.now() / 1000;
+
+  // FX orb grabs the touch if it starts on it — a control, not a spell.
+  if (fx.dragId === null && fx.hitTest(e.clientX, e.clientY)) {
+    fx.begin(e.pointerId, e.clientX, e.clientY);
+    ensureAudio().then(() => fx.apply());
+    haptic(6);
+    return;
+  }
+
   if (!firstTapped) firstTapped = true;
   splash.onTap(); // a tap clears the stage-2 hint (harmless otherwise)
 
@@ -88,6 +100,7 @@ function pointerDown(e) {
 }
 
 function pointerMove(e) {
+  if (e.pointerId === fx.dragId) { fx.drag(e.clientX, e.clientY); return; }
   const g = gestures.get(e.pointerId);
   if (!g) return;
   const t = performance.now() / 1000;
@@ -105,6 +118,7 @@ function pointerMove(e) {
 }
 
 function pointerUp(e) {
+  if (e.pointerId === fx.dragId) { fx.end(); return; }
   const g = gestures.get(e.pointerId);
   if (!g) return;
   gestures.delete(e.pointerId);
@@ -141,6 +155,7 @@ function loop() {
   if (dt > 0.1) dt = 0.1; // clamp long stalls
 
   tuning.update(dt);
+  fx.tick(dt);
 
   // Advance gestures (charge + inscription).
   let anyMoving = false;
@@ -192,6 +207,7 @@ function loop() {
     contacts: interaction.contactsThisFrame,
     now,
     fps: fpsEMA,
+    fx,
   });
 
   // Lightweight diagnostic snapshot (harmless; read by tests / curious consoles).

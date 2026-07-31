@@ -58,10 +58,31 @@ export class AudioEngine {
     this.bus = ctx.createGain();
     this.bus.connect(this.master);
 
-    // Convolver: generated noise IR, ~2.6s exponential decay (§9).
+    // Convolver reverb: generated noise IR, ~2.6s exponential decay (§9). Its
+    // return level is player-controlled by the FX orb (swipe left/right).
     this.convolver = ctx.createConvolver();
     this.convolver.buffer = makeIR(ctx, 2.6);
-    this.convolver.connect(this.bus);
+    this.reverbReturn = ctx.createGain();
+    this.reverbReturn.gain.value = 0.5;
+    this.convolver.connect(this.reverbReturn);
+    this.reverbReturn.connect(this.bus);
+
+    // Feedback delay, tapped off the bus, returning into the master gain (parallel
+    // wet path). Return level + feedback are player-controlled (swipe up/down).
+    this.delaySend = ctx.createGain();
+    this.delaySend.gain.value = 0.5;
+    this.delay = ctx.createDelay(1.0);
+    this.delay.delayTime.value = 0.34;
+    this.delayFeedback = ctx.createGain();
+    this.delayFeedback.gain.value = 0.0;
+    this.delayReturn = ctx.createGain();
+    this.delayReturn.gain.value = 0.0;
+    this.bus.connect(this.delaySend);
+    this.delaySend.connect(this.delay);
+    this.delay.connect(this.delayFeedback);
+    this.delayFeedback.connect(this.delay); // repeats
+    this.delay.connect(this.delayReturn);
+    this.delayReturn.connect(this.master);
 
     // Load the AudioWorklet and build the voice pool. If this fails (some mobile
     // browsers), plops still work via the master chain above; collisions fall back
@@ -229,6 +250,18 @@ export class AudioEngine {
     if (!this.ctx) return;
     const g = (0.6 + 0.4 * Math.pow(level, 0.7)) * 0.9;
     this.master.gain.setTargetAtTime(g, this.ctx.currentTime, 0.1);
+  }
+
+  // FX orb: reverb return level (0..1) and delay wet + feedback (0..1).
+  setReverb(v) {
+    if (!this.ctx) return;
+    this.reverbReturn.gain.setTargetAtTime(1.3 * v, this.ctx.currentTime, 0.05);
+  }
+  setDelay(v) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.delayReturn.gain.setTargetAtTime(0.9 * v, t, 0.05);
+    this.delayFeedback.gain.setTargetAtTime(Math.min(0.6, 0.62 * v), t, 0.05);
   }
 
   // Very quiet, tight tick on every pointerdown — a short high click, not a snare.
