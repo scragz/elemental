@@ -1,5 +1,5 @@
 // ELEMENTAL — visual language (design spec §10). The screen is a readout, not a UI.
-import { ELEMENTS, SEDIMENT_LIFE, CHARGE_RADIUS } from './config.js';
+import { ELEMENTS, CHARGE_RADIUS } from './config.js';
 import { env } from './env.js';
 import { clamp01, clamp } from './util.js';
 
@@ -10,7 +10,6 @@ export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.sediment = []; // { x, y, born }
     this.resize();
   }
 
@@ -23,14 +22,9 @@ export class Renderer {
     this.ctx.setTransform(env.dpr, 0, 0, env.dpr, 0, 0);
   }
 
-  addSediment(x, y, now) {
-    this.sediment.push({ x, y, born: now });
-    if (this.sediment.length > 400) this.sediment.shift();
-  }
-
   frame(state) {
     const ctx = this.ctx;
-    const { field, rings, gestures, contacts, now, fps, fx } = state;
+    const { field, rings, gestures, contacts, fps, fx } = state;
 
     // Self-throttle stroke resolution on slow frames so heavy fields stay smooth.
     let segments = SEGMENTS_MAX;
@@ -43,9 +37,6 @@ export class Renderer {
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = `rgba(${lum * 0.5}, ${lum * 0.6}, ${lum}, 0.20)`;
     ctx.fillRect(0, 0, env.w, env.h);
-
-    // Sediment — faint deposits at contact points, fading over ~30s (§7).
-    this._drawSediment(ctx, now);
 
     // Additive compositing on rings and contacts only (§10).
     ctx.globalCompositeOperation = 'lighter';
@@ -105,21 +96,6 @@ export class Renderer {
     ctx.fillStyle = `rgba(240, 250, 255, ${0.9 * g})`;
     ctx.beginPath(); ctx.arc(m.x, m.y, 3, 0, TWO_PI); ctx.fill();
 
-    ctx.globalCompositeOperation = 'source-over';
-  }
-
-  _drawSediment(ctx, now) {
-    ctx.globalCompositeOperation = 'lighter';
-    for (let i = this.sediment.length - 1; i >= 0; i--) {
-      const s = this.sediment[i];
-      const age = now - s.born;
-      if (age > SEDIMENT_LIFE) { this.sediment.splice(i, 1); continue; }
-      const a = (1 - age / SEDIMENT_LIFE) * 0.12;
-      ctx.fillStyle = `rgba(140, 170, 210, ${a})`;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, 2.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
     ctx.globalCompositeOperation = 'source-over';
   }
 
