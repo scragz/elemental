@@ -81,7 +81,7 @@ export const MAX_PAIRS = 12;
 // Contact tolerance (px). Rings read as "in contact" within this band of touching,
 // not only at exact circle intersection — bigger, longer-lasting collision targets
 // so meetings are easy to make and hear.
-export const CONTACT_PAD = 30;
+export const CONTACT_PAD = 48;
 
 // Per-voice loudness. Contact amplitude is a product of sub-1 terms (banked,
 // envelopes, field); this lifts it back to an audible level. Compressor + master
