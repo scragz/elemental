@@ -13,14 +13,17 @@ const STAGE2 = 'now let your ripples cross\nto make sound';
 const STYLE = `
 #splash {
   position: fixed; inset: 0; z-index: 5;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 4.5vh; text-align: center; padding: 0 6vw;
   pointer-events: none;
   transition: opacity 0.45s ease;
   font-family: 'Cantrip Mono', ui-monospace, Menlo, monospace;
 }
 #splash.hide { opacity: 0; }
+/* Logo in the top third, help text locked to the true centre — so the help line
+   never moves when the logo fades. Bottom third stays empty. */
 #splash-title {
+  position: absolute; left: 50%; top: 27%;
+  transform: translate(-50%, -50%);
+  width: 92vw; text-align: center;
   font-size: clamp(54px, 17vw, 150px);
   letter-spacing: 0.06em;
   color: #ffd7ee;                 /* phosphor light pink */
@@ -33,16 +36,18 @@ const STYLE = `
   transition: opacity 0.45s ease;
 }
 /* Stop the flicker animation so it stops overriding opacity, then fade cleanly in
-   place (no upward drift) — matches how the help line crossfades. */
+   place — the help line, fixed at centre, does not move. */
 #splash-title.dim { animation: none; opacity: 0; }
 #splash-sub {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 90vw; text-align: center;
   font-size: clamp(15px, 4.6vw, 23px);
   line-height: 1.7;
   letter-spacing: 0.05em;
   color: #ddd7c8;                 /* dusty white */
   text-shadow: 0 0 6px rgba(255, 225, 244, 0.22);
   white-space: pre-line;
-  max-width: 90vw;
   transition: opacity 0.35s ease;
 }
 #splash-sub.swap { opacity: 0; }
