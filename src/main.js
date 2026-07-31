@@ -26,7 +26,6 @@ const gestures = new Map(); // pointerId → Gesture
 
 let firstTapped = false;
 let lastT = performance.now() / 1000;
-let sedimentClock = 0;
 let fpsEMA = 60;
 
 window.__audio = audio; // debug handle
@@ -222,15 +221,6 @@ function loop() {
     collisionIntensity: interaction.intensity,
     holdingStill: gestures.size > 0 && !anyMoving && anyHoldingStill,
   });
-
-  // Deposit sediment at contact points, sparingly (§7).
-  sedimentClock += dt;
-  if (sedimentClock > 0.08) {
-    sedimentClock = 0;
-    for (const cp of interaction.contactsThisFrame) {
-      if (cp.amp > 0.05) renderer.addSediment(cp.x, cp.y, now);
-    }
-  }
 
   if (dt > 0) fpsEMA = fpsEMA * 0.9 + (1 / dt) * 0.1;
 
