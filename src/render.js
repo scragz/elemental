@@ -125,8 +125,9 @@ export class Renderer {
       const alpha = clamp(au * envn * 0.9, 0, 1);
       if (alpha < 0.02) continue; // invisible — skip the stroke
 
-      ctx.strokeStyle = `hsla(${col.h}, ${col.s}%, ${col.l + wv * 20}%, ${alpha})`;
-      ctx.lineWidth = clamp(0.6 + wv * 5, 0.4, 7) * massW;
+      // Exaggerated so the inscription (your distance modulation) is clearly legible.
+      ctx.strokeStyle = `hsla(${col.h}, ${col.s}%, ${col.l + wv * 32}%, ${alpha})`;
+      ctx.lineWidth = clamp(0.8 + wv * 10, 0.5, 13) * massW;
       ctx.beginPath();
       ctx.arc(r.x, r.y, r.r, ang0, ang0 + step);
       ctx.stroke();
@@ -171,15 +172,38 @@ export class Renderer {
     if (committed) {
       const cx = g.commitX, cy = g.commitY;
       const rr = Math.hypot(g.px - cx, g.py - cy);
-      // Reach ring: the current radius is exactly what's being inscribed.
-      ctx.strokeStyle = `hsla(${col.h}, ${col.s}%, 65%, 0.45)`;
-      ctx.lineWidth = 1.5;
+
+      // Live contour of the shape being carved: radius at each angle = how far your
+      // hand was from centre at that moment. This IS the ring you're inscribing —
+      // it makes "how my motion becomes the sound" visible. Distance from centre is
+      // the timbre; a flat circle = plain, in/out wobble = rich.
+      const shape = g.shape;
+      if (shape) {
+        const S = shape.length;
+        const N = 120;
+        ctx.strokeStyle = `hsla(${col.h}, ${col.s}%, 66%, 0.5)`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        let started = false;
+        for (let k = 0; k <= N; k++) {
+          const i = ((k % N) * (S / N)) | 0;
+          const rad = shape[i] * env.maxRadius;
+          if (rad < 2) { started = false; continue; } // unwritten slot — break the line
+          const ang = g.phase + (i / S) * Math.PI * 2;
+          const x = cx + Math.cos(ang) * rad;
+          const y = cy + Math.sin(ang) * rad;
+          if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+
+      // Faint reach ring at the current radius, and a spoke to the pointer.
+      ctx.strokeStyle = `hsla(${col.h}, ${col.s}%, 65%, 0.25)`;
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(cx, cy, Math.max(2, rr), 0, Math.PI * 2);
       ctx.stroke();
-      // Spoke from centre to the pointer.
-      ctx.strokeStyle = `hsla(${col.h}, ${col.s}%, 72%, 0.3)`;
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = `hsla(${col.h}, ${col.s}%, 72%, 0.28)`;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.lineTo(g.px, g.py);
@@ -213,16 +237,29 @@ export class Renderer {
   }
 
   _drawContact(ctx, cp) {
-    const a = clamp01(cp.amp * 2.5);
-    if (a <= 0.001) return;
-    const rad = 12 + a * 26; // bigger, easier-to-see collision glow
+    // Visibility floor so even a glancing contact reads as a clear hot spot.
+    const a = clamp01(0.35 + cp.amp * 3);
+    const rad = 22 + a * 34; // big, bright collision glow
     const grad = ctx.createRadialGradient(cp.x, cp.y, 0, cp.x, cp.y, rad);
-    grad.addColorStop(0, `rgba(255, 250, 235, ${0.85 * a})`);
-    grad.addColorStop(0.35, `rgba(200, 220, 255, ${0.45 * a})`);
+    grad.addColorStop(0, `rgba(255, 252, 240, ${0.95 * a})`);
+    grad.addColorStop(0.25, `rgba(255, 230, 200, ${0.6 * a})`);
+    grad.addColorStop(0.55, `rgba(180, 210, 255, ${0.35 * a})`);
     grad.addColorStop(1, 'rgba(120,150,220,0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(cp.x, cp.y, rad, 0, Math.PI * 2);
     ctx.fill();
+
+    // A bright pulsing core + halo ring to really mark the spot.
+    const coreR = 4 + a * 5;
+    ctx.fillStyle = `rgba(255, 255, 250, ${0.9 * a})`;
+    ctx.beginPath();
+    ctx.arc(cp.x, cp.y, coreR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(255, 240, 220, ${0.5 * a})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cp.x, cp.y, rad * 0.55, 0, Math.PI * 2);
+    ctx.stroke();
   }
 }
