@@ -9,6 +9,7 @@ import { Ring } from './ring.js';
 import { AudioEngine } from './audio.js';
 import { Interaction } from './interaction.js';
 import { Renderer } from './render.js';
+import { Splash } from './splash.js';
 
 const canvas = document.getElementById('c');
 const field = new Field();
@@ -16,11 +17,11 @@ const tuning = new Tuning();
 const audio = new AudioEngine();
 const interaction = new Interaction(audio);
 const renderer = new Renderer(canvas);
+const splash = new Splash();
 
 const rings = [];
 const gestures = new Map(); // pointerId → Gesture
 
-let firstRun = 1;          // first-run text alpha; fades on first tap, never returns
 let firstTapped = false;
 let lastT = performance.now() / 1000;
 let sedimentClock = 0;
@@ -74,6 +75,7 @@ function ensureAudio() {
 function pointerDown(e) {
   const t = performance.now() / 1000;
   if (!firstTapped) firstTapped = true;
+  splash.onTap(); // a tap clears the stage-2 hint (harmless otherwise)
 
   const g = new Gesture(e.clientX, e.clientY, t);
   gestures.set(e.pointerId, g);
@@ -115,6 +117,8 @@ function pointerUp(e) {
   const pan = (e.clientX / env.w) * 2 - 1;
   audio.releaseSound(g.element, tuning.fundamental, pan);
   haptic(10);
+
+  splash.onCast(); // first ripple cast → advance the intro to its second hint
 }
 
 canvas.addEventListener('pointerdown', pointerDown);
@@ -155,11 +159,10 @@ function loop() {
     if (rings[i].dead) rings.splice(i, 1);
   }
 
-  // Interactions → voices.
-  if (audio.ready) {
-    interaction.update(rings, tuning.fundamental, field.level);
-    audio.setField(field.level);
-  }
+  // Interactions → voices (contact glows populate even before audio unlocks;
+  // voice allocation inside no-ops until the pool exists).
+  interaction.update(rings, tuning.fundamental, field.level);
+  if (audio.ready) audio.setField(field.level);
 
   // Field economy.
   field.update(dt, {
@@ -180,9 +183,6 @@ function loop() {
     }
   }
 
-  // First-run text fades on first tap and never returns (§10).
-  if (firstTapped) firstRun = Math.max(0, firstRun - dt * 1.2);
-
   if (dt > 0) fpsEMA = fpsEMA * 0.9 + (1 / dt) * 0.1;
 
   renderer.frame({
@@ -191,7 +191,6 @@ function loop() {
     gestures: [...gestures.values()],
     contacts: interaction.contactsThisFrame,
     now,
-    firstRun,
     fps: fpsEMA,
   });
 

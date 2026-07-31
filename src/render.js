@@ -30,7 +30,7 @@ export class Renderer {
 
   frame(state) {
     const ctx = this.ctx;
-    const { field, rings, gestures, contacts, now, firstRun, fps } = state;
+    const { field, rings, gestures, contacts, now, fps } = state;
 
     // Self-throttle stroke resolution on slow frames so heavy fields stay smooth.
     let segments = SEGMENTS_MAX;
@@ -55,8 +55,6 @@ export class Renderer {
     for (const cp of contacts) this._drawContact(ctx, cp);
 
     ctx.globalCompositeOperation = 'source-over';
-
-    if (firstRun) this._drawFirstRun(ctx, firstRun);
   }
 
   _drawSediment(ctx, now) {
@@ -199,16 +197,5 @@ export class Renderer {
     ctx.beginPath();
     ctx.arc(cp.x, cp.y, rad, 0, Math.PI * 2);
     ctx.fill();
-  }
-
-  _drawFirstRun(ctx, alpha) {
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = 'rgba(180, 190, 210, 0.9)';
-    ctx.font = '300 18px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('drag to cast a ring', env.w / 2, env.h / 2);
-    ctx.restore();
   }
 }
