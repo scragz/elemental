@@ -17,10 +17,13 @@ export class Fx {
     this.glow = 0; // 0..1 activity glow for rendering
   }
 
-  // Orb geometry, kept clear of the very corner / safe area.
+  // Orb geometry — inset from the corner (and clear of the phone's bottom home
+  // indicator) so it's comfortable to reach without hugging the edge.
   orb() {
-    const r = Math.max(22, Math.min(34, Math.min(env.w, env.h) * 0.05));
-    return { x: env.w - r - 20, y: env.h - r - 20, r };
+    const r = Math.max(24, Math.min(36, Math.min(env.w, env.h) * 0.055));
+    const mx = 46;
+    const my = 60;
+    return { x: env.w - r - mx, y: env.h - r - my, r };
   }
 
   hitTest(x, y) {
