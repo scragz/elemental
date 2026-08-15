@@ -43,7 +43,7 @@ export class Renderer {
 
     for (const r of rings) this._drawRing(ctx, r, segments);
     for (const g of gestures) this._drawGesture(ctx, g);
-    for (const cp of contacts) this._drawContact(ctx, cp);
+    for (const cp of contacts) this._drawContact(ctx, cp, segments);
 
     ctx.globalCompositeOperation = 'source-over';
 
@@ -212,17 +212,49 @@ export class Renderer {
     ctx.fill();
   }
 
-  _drawContact(ctx, cp) {
+  // A contact has no body of its own (§10): instead each ring brightens along the
+  // stretch of its own circumference that is being read, so the meeting reads as
+  // the circles glowing where they touch rather than as a travelling object.
+  _drawContact(ctx, cp, segments) {
     const a = clamp01(cp.amp * 2.5);
-    if (a <= 0.001) return;
-    const rad = 12 + a * 26; // bigger, easier-to-see collision glow
-    const grad = ctx.createRadialGradient(cp.x, cp.y, 0, cp.x, cp.y, rad);
-    grad.addColorStop(0, `rgba(255, 250, 235, ${0.85 * a})`);
-    grad.addColorStop(0.35, `rgba(200, 220, 255, ${0.45 * a})`);
-    grad.addColorStop(1, 'rgba(120,150,220,0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(cp.x, cp.y, rad, 0, Math.PI * 2);
-    ctx.fill();
+    if (a <= 0.02 || !cp.arcs) return;
+    const steps = segments >= 48 ? 9 : 6;
+    for (const arc of cp.arcs) this._drawContactArc(ctx, arc, a, steps);
+  }
+
+  _drawContactArc(ctx, arc, a, steps) {
+    if (arc.r < 2) return;
+    // Kept in the element's own colour and well below white: the frame is only 20%
+    // cleared, so a glow re-draws over its own trail for several frames and any
+    // per-frame alpha stacks roughly five-fold on screen.
+    const col = this._elementColor(arc.element, 66);
+    const sat = Math.min(100, col.s + 10);
+    // Roughly constant arc *length* so the glow keeps its size as the ring grows.
+    const half = Math.min(Math.PI * 0.5, (34 + 40 * a) / arc.r);
+    const step = (half * 2) / steps;
+    ctx.lineCap = 'butt';
+
+    // Segmented so both passes can taper to nothing at the ends — a wide soft halo
+    // that bleeds off the stroke, and a tighter core right at the contact.
+    for (let i = 0; i < steps; i++) {
+      const t = ((i + 0.5) / steps) * 2 - 1; // -1..1 across the span
+      const fade = 1 - t * t;                // broad taper, zero at the ends
+      const core = fade * fade;              // core sits tighter around the contact
+      const s0 = arc.angle - half + i * step;
+
+      ctx.strokeStyle = `hsla(${col.h}, ${sat}%, ${col.l}%, ${0.03 * a * fade})`;
+      ctx.lineWidth = 4 + (7 + 8 * a) * fade;
+      ctx.beginPath();
+      ctx.arc(arc.x, arc.y, arc.r, s0, s0 + step);
+      ctx.stroke();
+
+      const alpha = 0.055 * a * core;
+      if (alpha < 0.004) continue;
+      ctx.strokeStyle = `hsla(${col.h}, ${sat}%, ${col.l + 12}%, ${alpha})`;
+      ctx.lineWidth = 1 + 3.5 * a * core;
+      ctx.beginPath();
+      ctx.arc(arc.x, arc.y, arc.r, s0, s0 + step);
+      ctx.stroke();
+    }
   }
 }

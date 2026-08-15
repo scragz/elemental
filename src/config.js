@@ -1,7 +1,7 @@
 // ELEMENTAL — global constants (design spec §2, §4, §5, §6)
 // Everything tunable lives here so the "found by ear" numbers (§11) are in one place.
 
-export const LAP_DURATION = 2.0;   // s — one revolution of the write head (§2)
+export const LAP_DURATION = 2.4;   // s — one revolution of the write head (§2)
 export const SLOTS        = 512;   // circumferential resolution
 export const MAX_PARTIALS = 8;     // harmonic ceiling (§2.2 / §11.7)
 export const SPEED_REF    = 900;   // px/s — authority normalization (§2.3 / §11.1)
@@ -37,12 +37,14 @@ export const POLES = [
 // Octaves are pushed into the range phone speakers can reproduce (they roll off hard
 // below ~400Hz): even earth's fundamental sits ~200Hz+ with strong harmonics above.
 // Ordering (earth<water<fire<air) is preserved.
+// Expansion is deliberately unhurried — rings drift outward rather than race — with
+// lifetimes stretched to match so each ring still reaches across the screen.
 export const ELEMENTS = {
-  air:   { speed: 240, life: 4,  octave: 3.5,  hue: 270, sat: 70, character: 'thin'   },
-  fire:  { speed: 170, life: 6,  octave: 2.5,  hue: 14,  sat: 85, character: 'jitter' },
-  water: { speed: 95,  life: 12, octave: 2.0,  hue: 190, sat: 80, character: 'glide'  },
-  earth: { speed: 62,  life: 20, octave: 1.5,  hue: 40,  sat: 65, character: 'fat'    },
-  null:  { speed: 120, life: 8,  octave: 2.0,  hue: 0,   sat: 0,  character: 'inert'  },
+  air:   { speed: 168, life: 5.5, octave: 3.5,  hue: 270, sat: 70, character: 'thin'   },
+  fire:  { speed: 120, life: 8,   octave: 2.5,  hue: 14,  sat: 85, character: 'jitter' },
+  water: { speed: 67,  life: 16,  octave: 2.0,  hue: 190, sat: 80, character: 'glide'  },
+  earth: { speed: 44,  life: 26,  octave: 1.5,  hue: 40,  sat: 65, character: 'fat'    },
+  null:  { speed: 84,  life: 11,  octave: 2.0,  hue: 0,   sat: 0,  character: 'inert'  },
 };
 
 // Just-intonation ratios off the fundamental (§6).
@@ -71,7 +73,7 @@ export const FIELD_VOICE_FLOOR = 0.5;
 
 // Casting (§1.3): release velocity → expansion multiplier.
 export const CAST_MULT_MIN = 0.6;
-export const CAST_MULT_MAX = 1.8;
+export const CAST_MULT_MAX = 1.5;
 export const CAST_SPEED_REF = 1200; // px/s that maps to CAST_MULT_MAX
 
 // Safety caps (§5) — governor, not design.
