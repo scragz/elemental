@@ -55,12 +55,13 @@ npm run deploy
   | down | **earth** | fat, low, stays for ages |
   | left | **water** | glides, mid register |
 
-- **Keep moving** after commit. A write head sweeps the ring at a fixed rate (one lap every 2s). What your hand *does* — not where it goes — is inscribed into the ring's waveform. Each completed lap becomes a harmonic partial, weighted by how well it agrees with a reference that your *slowest* motions write. **Anchor slowly, then bow fast against the shape you declared.**
+- **Keep moving** after commit. A write head sweeps the ring at a fixed rate (one lap every 2.4s). What your hand *does* — not where it goes — is inscribed into the ring's waveform. Each completed lap becomes a harmonic partial, weighted by how well it agrees with a reference that your *slowest* motions write. **Anchor slowly, then bow fast against the shape you declared.**
 - **Release** to cast. Flick and it launches; let go still and it drifts. The ring bakes to a single-cycle wavetable and expands until it dies.
 - **Release before committing** for a bare *null* plop — a neutral spacer that takes on the character of whatever it meets.
 
 When two rings overlap, their contact points sweep across each other and read both
-waveforms aloud. Same-element rings cast alike beat against each other in near-unison —
+waveforms aloud — heard as a voice, seen as each ring quietly glowing along the
+stretch being read. Same-element rings cast alike beat against each other in near-unison —
 that's the centerpiece. Difference textures; sameness rewards.
 
 Everything is ambient: **background luminance is the field level**, ring thickness is

@@ -125,8 +125,17 @@ export class Interaction {
       // so a busy screen can still refill (§5).
       intensity += activity * field;
 
-      // Contact point screen position → pan + render.
-      this.contactsThisFrame.push({ x: cp.x, y: cp.y, amp });
+      // Contact point screen position → pan + render. The renderer draws the glow
+      // *on* each ring's circumference, so it carries the two arcs being read.
+      this.contactsThisFrame.push({
+        x: cp.x,
+        y: cp.y,
+        amp,
+        arcs: [
+          { x: r1.x, y: r1.y, r: r1.r, angle: cp.a1, element: r1.element },
+          { x: r2.x, y: r2.y, r: r2.r, angle: cp.a2, element: r2.element },
+        ],
+      });
 
       if (v) {
         this.audio.updateVoice(v, {
