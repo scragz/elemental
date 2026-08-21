@@ -1,4 +1,4 @@
-# ELEMENTAL
+# RHIZOMATA 
 
 > An instrument disguised as a toy. Tap to cast a ring. Gesture to carve it. Rings meet and read each other aloud.
 
