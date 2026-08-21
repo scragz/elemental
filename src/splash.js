@@ -71,7 +71,7 @@ export class Splash {
     this.el.id = 'splash';
     this.title = document.createElement('div');
     this.title.id = 'splash-title';
-    this.title.textContent = 'ELEMENTAL';
+    this.title.textContent = 'RHIZOMATA';
     this.sub = document.createElement('div');
     this.sub.id = 'splash-sub';
     this.sub.textContent = STAGE1;
