@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "elemental",
+  "name": "rhizomata",
   "main": "src/worker/index.ts",
   "compatibility_date": "2025-01-01",
   "build": {
