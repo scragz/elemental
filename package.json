@@ -1,9 +1,9 @@
 {
-  "name": "elemental",
-  "version": "0.2.0",
+  "name": "rhizomata",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "ELEMENTAL — an instrument disguised as a toy. Tap to cast a ring; rings meet and read each other aloud.",
+  "description": "RHIZOMATA — Tap to cast a ring; rings meet and read each other aloud.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
